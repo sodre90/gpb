@@ -1,0 +1,98 @@
+{{define "content"}}
+{{template "overviewlive" .Data}}
+{{end}}
+
+{{/* The whole page is one region. Its only control is a submit button, so there is no half-made
+     choice a re-render could throw away — and five separate regions would be five fragment
+     endpoints buying nothing the one buys. */}}
+{{define "overviewlive"}}
+<div id="live-overview" data-live="run progress session" data-live-src="/live/overview">
+
+{{with .Backup}}
+{{if .Empty}}
+<section class="empty">
+  <p>Nothing is being backed up yet. Choose an album, or turn on your whole library — until
+     then a backup run has nothing to fetch.</p>
+  <p><a href="/albums">Choose what to back up</a></p>
+</section>
+{{else}}
+<section class="card">
+  <h2>Backup</h2>
+  <p>{{if .Albums}}{{quantity .Albums "album"}}{{end}}{{if and .Albums .Library}} and {{end}}{{if .Library}}your whole library{{end}}</p>
+  {{if .Walked}}
+    <div class="stats">
+      <p class="stat"><span class="stat-value">{{count .Known}}</span> <span class="stat-label">photos</span></p>
+      <p class="stat"><span class="stat-value">{{count .Done}}</span> <span class="stat-label">backed up</span></p>
+      <p class="stat"><span class="stat-value">{{count .Pending}}</span> <span class="stat-label">to go</span></p>
+      {{if .Failed}}<p class="stat bad"><span class="stat-value">{{count .Failed}}</span> <span class="stat-label">failed</span></p>{{end}}
+    </div>
+    <div class="meter" role="progressbar" aria-valuenow="{{.Done}}" aria-valuemin="0"
+         aria-valuemax="{{.Known}}" aria-label="Backup completion"><span style="width: {{.Percent}}%"></span></div>
+    <p class="small muted">{{.Percent}}% · {{.OnDisk}} on disk{{with .Free}} · {{.}} free{{end}}</p>
+    {{if .Cramped}}
+    <p class="banner warn" role="status">
+      Only {{.Free}} is left where the photos go. A run stops when it gets that low rather than
+      filling the disk, so the backup will pause until there is more room.
+    </p>
+    {{end}}
+  {{else}}
+    <p class="muted">
+      Around {{quantity .Expected "photo"}}, by Google’s own count of each album — a photo in two
+      albums is counted twice there. Nothing has been listed yet; the first run finds what is
+      really in them.
+    </p>
+  {{end}}
+</section>
+{{end}}
+{{end}}
+
+{{with .Now}}{{template "nowcard" .}}{{end}}
+
+<div class="card-row">
+  <section class="card">
+    <h2>Last run</h2>
+    {{with .LastRun}}
+      {{if .Finished}}
+        <p><span class="outcome {{.Outcome}}">{{.Outcome}}</span> · started {{.StartedAt}}</p>
+        <p class="small muted">{{count .Downloaded}} downloaded{{if .Failed}} · {{count .Failed}} failed{{end}}</p>
+        {{with .Error}}<p class="small error wrap">{{.}}</p>{{end}}
+      {{else if .StillGoing}}
+        <p>Started {{.StartedAt}} and still going.</p>
+        <p class="small muted">The counts above move as it works.</p>
+      {{else}}
+        <p><span class="badge warn">interrupted</span></p>
+        <p class="small muted">Started {{.StartedAt}} and never finished: the daemon stopped
+           before it could say how it went. Nothing downloaded is lost; the next run picks up
+           where it left off.</p>
+      {{end}}
+      <p class="small"><a href="/runs">All runs</a></p>
+    {{else}}
+      <p class="muted">No runs yet.</p>
+      <p class="small muted">One starts on its own at the scheduled time, or press Back up now.</p>
+    {{end}}
+  </section>
+
+  {{with .Session}}
+  <section class="card">
+    <h2>Google session</h2>
+    <p class="state {{if .Healthy}}ok{{else}}bad{{end}}">{{if .Healthy}}Signed in{{else}}{{.State}}{{end}}</p>
+    <p class="small muted">last confirmed {{.LastSuccess}} · <a href="/reauth">details</a></p>
+  </section>
+  {{end}}
+</div>
+
+{{if .Waiting}}
+<section class="card">
+  <h2>Review</h2>
+  <p>{{quantity .Waiting "item"}} waiting for a decision. <a href="/review">Review them</a>.</p>
+</section>
+{{end}}
+
+{{if not .Running}}
+<div class="actions">
+  <form method="post" action="/sync"><button type="submit" class="primary">Back up now</button></form>
+</div>
+{{end}}
+
+</div>
+{{end}}

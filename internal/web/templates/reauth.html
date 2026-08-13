@@ -1,0 +1,82 @@
+{{define "authstatus"}}
+<div id="live-auth-status" data-live="session" data-live-src="/live/reauth/status">
+  <p class="state {{if .Healthy}}ok{{else}}bad{{end}}">{{if .Healthy}}Signed in{{else}}{{.State}}{{end}}</p>
+  <table class="kv">
+    <tr><th>Last confirmed</th><td>{{.LastSuccess}}</td></tr>
+    <tr><th>Keepalive</th><td>every {{.KeepaliveEvery}}, on its own</td></tr>
+    {{with .LastError}}<tr><th>Last error</th><td class="wrap error">{{.}}</td></tr>{{end}}
+  </table>
+</div>
+{{end}}
+
+{{/* The attributes are left off while the login browser is up, so that no message can re-render
+     the noVNC canvas out from under someone halfway through signing in to Google. Leaving them
+     off is a stronger guarantee than remembering not to send anything. */}}
+{{define "authactions"}}
+<div id="live-auth-actions"{{if not .Running}} data-live="session" data-live-src="/live/reauth/actions"{{end}}>
+{{if .Running}}
+  {{if .OwnedByMe}}
+    {{if .RemoteCanvas}}
+      <p class="banner" role="status">Login browser started {{.StartedAt}}. Sign in below, then click Done.</p>
+      <iframe class="vnc" src="/novnc/vnc.html?autoconnect=true&resize=scale&path=reauth/ws" title="Google login browser"></iframe>
+    {{else}}
+      <p class="banner" role="status">Login browser started {{.StartedAt}}. A browser window has
+         opened on this machine's screen — sign in there, then come back and click Done.</p>
+      <p class="small muted">It closes on its own {{.IdleTimeout}} after it opened, since there is
+         no remote canvas to measure activity on.</p>
+    {{end}}
+    <div class="actions">
+      <form method="post" action="/reauth/stop"><button type="submit" class="primary">Done — close the browser</button></form>
+    </div>
+  {{else}}
+    <p class="banner danger" role="alert">A login browser is already open in another web session,
+       started {{.StartedAt}}.</p>
+  {{end}}
+{{else if .Status.Verifying}}
+  <p class="banner" role="status">Checking the Google session — the verdict lands here in a moment.</p>
+{{else if .Status.Healthy}}
+  <div class="actions">
+    <form method="post" action="/warmup"><button type="submit">Check now</button></form>
+  </div>
+{{else if .Unavailable}}
+  <p class="banner danger" role="alert">Browser login is unavailable here: {{.Unavailable}}.</p>
+  <p class="small muted">Set <code>GPB_CHROME_PATH</code> if the browser is installed somewhere
+     unusual. On a headless server the flow also needs Xvfb, x11vnc and websockify, which ship in
+     the container image.</p>
+{{else}}
+  <p>Backups are paused until this account is signed in again. Starting a login browser opens a
+     fully authenticated Google session {{if .RemoteCanvas}}on this server, shown below{{else}}on
+     this machine's screen{{end}} — you finish Google's login in it, phone prompt and all. It is
+     torn down when you click Done or after {{.IdleTimeout}} of inactivity.</p>
+  <form method="post" action="/reauth/start" class="card">
+    <label for="password">Confirm your password to open it</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required>
+    <button type="submit" class="primary">Start browser login</button>
+  </form>
+  <div class="actions">
+    <form method="post" action="/warmup"><button type="submit">Check again first</button></form>
+  </div>
+{{end}}
+</div>
+{{end}}
+
+{{define "content"}}
+{{with .Data}}
+{{template "authstatus" .Status}}
+{{template "authactions" .}}
+
+{{/* Outside every region on purpose: a swap would snap this shut on whoever opened it. */}}
+{{with .Status}}
+<details class="diagnostics">
+  <summary>Diagnostics</summary>
+  <table class="kv">
+    <tr><th>Cookies held</th><td>{{.CookieCount}}</td></tr>
+    <tr><th>Chrome sandbox</th><td>{{if .UsingNoSandbox}}off (--no-sandbox fallback in use){{else}}on{{end}}</td></tr>
+    <tr><th>Browser user agent</th><td class="wrap">{{.UserAgent}}</td></tr>
+    <tr><th>Last warmup</th><td>{{.LastWarmup}}</td></tr>
+  </table>
+</details>
+{{end}}
+
+{{end}}
+{{end}}

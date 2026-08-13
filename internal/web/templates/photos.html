@@ -1,0 +1,34 @@
+{{define "pager"}}
+{{if gt .Pages 1}}
+<nav class="pager" aria-label="Grid pages">
+  {{if gt .Page 1}}<a href="/photos?page={{.PrevPage}}">← Newer page</a>{{end}}
+  <span class="muted">Page {{.Page}} of {{.Pages}}</span>
+  {{if lt .Page .Pages}}<a href="/photos?page={{.NextPage}}">Older page →</a>{{end}}
+</nav>
+{{end}}
+{{end}}
+
+{{define "content"}}
+{{with .Data}}
+
+{{if .Items}}
+<p class="muted">
+  {{quantity .Total "item"}} · {{count .BackedUp}} backed up · newest first.
+  Click a photo to look at it.
+</p>
+
+{{template "pager" .}}
+<div class="grid" id="grid">
+  {{range .Items}}{{template "gridcell" .Shown}}{{end}}
+</div>
+{{template "pager" .}}
+{{else}}
+<section class="empty">
+  <p>Nothing has been listed yet. Photos turn up here once a run has walked the account.</p>
+  <p><a href="/">Back to the overview</a></p>
+</section>
+{{end}}
+
+{{end}}
+<script src="/static/viewer.js" defer></script>
+{{end}}

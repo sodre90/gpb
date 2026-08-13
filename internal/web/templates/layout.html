@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · gpb</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body{{if not .Authenticated}} class="login-page"{{end}}>
+{{if .Authenticated}}
+<a class="skip-link" href="#main">Skip to content</a>
+{{block "navbar" .}}
+<header class="topbar" id="live-nav" data-live="review" data-live-src="{{.NavSrc}}">
+  <nav aria-label="Main">
+    <span class="topbar-brand">gpb</span>
+    {{range .Nav}}<a href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}
+      {{with .Waiting}}aria-label="Review, {{.}} waiting"{{end}}>{{.Label}}{{with .Waiting}}
+      <span class="topbar-count" aria-hidden="true">{{.}}</span>{{end}}</a>
+    {{end}}
+    <form method="post" action="/logout"><button class="btn-link">Log out</button></form>
+  </nav>
+</header>
+{{end}}
+
+{{block "sessionbanner" .}}
+<div id="live-session" data-live="run session" data-live-src="/live/banner">
+  {{with .Session}}<p class="banner {{.Level}} banner-session" role="alert">{{.Message}} <a href="/reauth">{{.Action}}</a></p>{{end}}
+</div>
+{{end}}
+{{end}}
+
+<main id="main">
+  <h1>{{.Title}}</h1>
+  {{with .Error}}<p class="banner danger" role="alert">{{.}}</p>{{end}}
+  {{with .Notice}}<p class="banner success" role="status">{{.}}</p>{{end}}
+  {{template "content" .}}
+</main>
+<script src="/static/images.js" defer></script>
+{{if .Authenticated}}<script src="/static/live.js" defer></script>{{end}}
+</body>
+</html>

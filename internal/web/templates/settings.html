@@ -1,0 +1,198 @@
+{{define "content"}}
+{{with .Data}}
+<form method="post" action="/settings" class="settings-form">
+
+<section class="card">
+  <h2>Schedule</h2>
+  <p>
+    <label for="sync_at">Back up daily at</label>
+    <input type="text" id="sync_at" name="sync_at" value="{{.SyncAt}}" size="6">
+    <span class="small muted">local time, HH:MM</span>
+  </p>
+  <p>
+    <label for="keepalive_interval">Check the Google session every</label>
+    <input type="text" id="keepalive_interval" name="keepalive_interval" value="{{.KeepaliveInterval}}" size="8">
+    <span class="small muted">a duration, such as 12h</span>
+  </p>
+</section>
+
+<section class="card">
+  <h2>Limits</h2>
+  <p>
+    <label for="download_workers">Download workers</label>
+    <input type="text" id="download_workers" name="download_workers" value="{{.DownloadWorkers}}" size="4">
+  </p>
+  <p>
+    <label for="requests_per_second">Requests per second</label>
+    <input type="text" id="requests_per_second" name="requests_per_second" value="{{.RequestsPerSecond}}" size="4">
+    <span class="small muted">the whole point of the pace: a library this size is a slow walk</span>
+  </p>
+  <p>
+    <label for="min_free">Keep free on the disk</label>
+    <input type="text" id="min_free" name="min_free" value="{{.MinFree}}" size="10">
+    <span class="small muted">a run stops rather than eat into this. A bare number is GB, so
+       <code>40</code> is 40 GB; <code>0</code> keeps nothing back and lets a backup fill the
+       disk</span>
+  </p>
+</section>
+
+<section class="card">
+  <h2>Thumbnails</h2>
+  <p>
+    <label for="thumb_cache_max">Cache size cap</label>
+    <input type="text" id="thumb_cache_max" name="thumb_cache_max" value="{{.ThumbCacheMax}}" size="10">
+    <span class="small muted">the cache is disposable; shrinking it only costs re-fetches</span>
+  </p>
+</section>
+
+<section class="card">
+  <h2>How this page is reached</h2>
+  <p class="muted">
+    The password below unlocks a Chrome profile that is a whole Google account, not a
+    Photos-only token, and the cookie it hands back is as good as the password until it expires.
+    Over plain <code>http</code> both cross your network in the clear, where anything else on it
+    can read them.
+  </p>
+  <p>
+    <label for="external_url">Address</label>
+    <input type="text" id="external_url" name="external_url" value="{{.ExternalURL}}" size="30"
+           placeholder="http://192.168.1.10:8090">
+    <span class="small muted">where you type this UI in, from outside the container. The links
+       gpb sends you — chiefly the one into the Google sign-in — are built from it, and so is the
+       certificate below</span>
+  </p>
+  <p>
+    <label for="tls_mode">Encryption</label>
+    <select id="tls_mode" name="tls_mode">
+      <option value="off" {{if eq .TLSMode "off"}}selected{{end}}>Off — plain http</option>
+      <option value="self-signed" {{if eq .TLSMode "self-signed"}}selected{{end}}>On, with a certificate gpb makes</option>
+      <option value="provided" {{if eq .TLSMode "provided"}}selected{{end}}>On, with a certificate I provide</option>
+    </select>
+  </p>
+  <p class="small muted">
+    A certificate gpb makes for itself encrypts the connection and proves nothing about who is at
+    the other end of it — there is no certificate authority on a home network and no domain name
+    to be issued one for. Your browser will warn you the first time and you will have to accept
+    it. That warning is the honest state of affairs, not a fault.
+  </p>
+  <p>
+    <label for="tls_cert_file">Certificate file</label>
+    <input type="text" id="tls_cert_file" name="tls_cert_file" value="{{.TLSCertFile}}" size="30"
+           placeholder="/data/tls/fullchain.pem">
+    <span class="small muted">only for a certificate you provide, and a path inside the
+       container</span>
+  </p>
+  <p>
+    <label for="tls_key_file">Key file</label>
+    <input type="text" id="tls_key_file" name="tls_key_file" value="{{.TLSKeyFile}}" size="30"
+           placeholder="/data/tls/privkey.pem">
+  </p>
+  {{if .TLSSchemeMismatch}}
+    <p class="state bad">
+      The address above says <code>{{.ExternalURL}}</code> but this UI is set to serve
+      <code>{{.Scheme}}</code>. The sign-in link gpb sends will lead nowhere until the two agree.
+    </p>
+  {{end}}
+  {{with .TLSProblem}}<p class="state bad">{{.}}</p>{{end}}
+  {{with .TLSExpires}}
+    <p class="state ok">The certificate in use runs out on {{.}}<span class="small muted"> — a
+       self-signed one is renewed by gpb a month before that, at a restart</span></p>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>Home Assistant</h2>
+  <p class="muted">
+    gpb announces itself over MQTT, so Home Assistant builds the sensors itself — you should not
+    have to write any YAML. Leave the broker empty to stay off the network entirely.
+  </p>
+  <p>
+    <label for="mqtt_broker">Broker</label>
+    <input type="text" id="mqtt_broker" name="mqtt_broker" value="{{.MQTTBroker}}" size="30"
+           placeholder="192.168.1.10">
+    <span class="small muted">host, host:port, or a full <code>tcp://</code> or
+       <code>ssl://</code> address; port 1883 is assumed</span>
+  </p>
+  <p>
+    <label for="mqtt_username">Username</label>
+    <input type="text" id="mqtt_username" name="mqtt_username" value="{{.MQTTUsername}}" size="20"
+           autocomplete="off">
+    <span class="small muted">make gpb its own broker user rather than sharing yours</span>
+  </p>
+  <p>
+    <label for="mqtt_password">Password</label>
+    <input type="password" id="mqtt_password" name="mqtt_password" size="20" autocomplete="new-password">
+    {{if .MQTTHasPassword}}
+      <span class="small muted">one is set; leave this empty to keep it</span>
+      <label class="small"><input type="checkbox" name="mqtt_password_clear" value="1"> forget it</label>
+    {{else}}
+      <span class="small muted">none set</span>
+    {{end}}
+  </p>
+  <p>
+    <label for="mqtt_topic_prefix">Topic prefix</label>
+    <input type="text" id="mqtt_topic_prefix" name="mqtt_topic_prefix" value="{{.MQTTTopicPrefix}}" size="12">
+    <span class="small muted">where gpb's own topics live on the broker</span>
+  </p>
+  {{if .MQTTBroker}}
+    <p class="state {{if .MQTTConnected}}ok{{else}}bad{{end}}">
+      {{if .MQTTConnected}}Connected{{else}}Not connected{{end}}
+      {{with .MQTTDetail}}<span class="small muted">— {{.}}</span>{{end}}
+      {{with .MQTTSince}}<span class="small muted">since {{.}}</span>{{end}}
+      <button type="submit" formaction="/settings/broker" formnovalidate>Try again</button>
+    </p>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>Notifications</h2>
+  <p>
+    <label for="notify_command">Hook command</label>
+    <input type="text" id="notify_command" name="notify_command" value="{{.NotifyCommand}}" size="30">
+    <span class="small muted">run as <code>command &lt;event&gt; &lt;message&gt;</code>; empty for none</span>
+  </p>
+</section>
+
+<div class="actions">
+  <button type="submit" class="primary">Save</button>
+  <p class="small muted">The backup time is read fresh before every check and the broker is
+     dialled again as soon as you save, so both take effect here and now. The keepalive
+     interval, the limits, the thumbnail cache and the hook command are read when the daemon
+     starts, so those wait for a restart, which is a button at the foot of this page — as does
+     encryption, which is the one to remember: afterwards this page answers on a different scheme
+     from the one you are reading it over.</p>
+</div>
+</form>
+
+<section class="card">
+  <h2>Restart</h2>
+  {{if .CanRestart}}
+    <p class="muted">gpb reads its schedule, its limits and its encryption setting once, when it
+       starts. This is how a saved change of any of those takes effect.</p>
+    {{with .Activity}}
+      <p class="state bad">A backup is running — {{.}}. Restarting stops it where it is; the next
+         run carries on from there rather than starting the album again.</p>
+    {{end}}
+    <form method="post" action="/settings/restart">
+      <button type="submit">Restart gpb</button>
+      <span class="small muted">it answers again in about fifteen seconds{{with .ExternalURL}},
+         at <code>{{.}}</code>{{end}}</span>
+    </form>
+  {{else}}
+    <p class="small muted">gpb is not running under anything that would start it again, so it
+       restarts the way you started it.</p>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>Not settings</h2>
+  <p class="small muted">These come from how the container is run, and changing them here would
+     be a lie about where your photos are.</p>
+  <table class="kv">
+    <tr><th>Photos directory</th><td class="wrap">{{.PhotosDir}}</td></tr>
+    <tr><th>Listen address</th><td>{{.Listen}}</td></tr>
+    <tr><th>Password</th><td>set with <code>gpb passwd</code> on the server</td></tr>
+  </table>
+</section>
+{{end}}
+{{end}}

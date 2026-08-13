@@ -1,0 +1,62 @@
+# Changelog
+
+## 0.1.1 — 2026-08-13
+
+- **An image to pull**, [`sodre90/gpb`](https://hub.docker.com/r/sodre90/gpb), linux/amd64 —
+  Google ships Chrome for Linux on that architecture and no other. It carries no part of Google
+  Chrome: the container downloads Chrome from Google into its own data volume the first time it
+  starts, so what is published here is this project and Chrome still reaches you from Google under
+  the terms you accept there. 0.1.0 said no image should ever be published; this is the way to
+  publish one honestly, and it costs a 110 MB download on the first start and about 430 MB in the
+  data directory. The image is smaller for it — 688 MB against 1.3 GB.
+- **`gpb verify`**, which re-reads every file the backup calls done and checks it against the
+  hash taken while it was written. It is the only thing that reads a finished file again: a run
+  notices a file that has *gone*, but one quietly rotted by a failing disk keeps its name, its
+  size and its place in the pool. It exits non-zero when it found anything, so a cron entry needs
+  no output parsing; `--repair` puts the damaged files back on the work list and deletes nothing.
+  An unreadable file — a bad mount, a permissions error — is reported and never requeued.
+- **A weekly copy of the database**, `VACUUM INTO /data/state.backup.db`, taken by the daemon.
+  The pool can be listed from Google again if it has to be; what was picked, what was reviewed
+  and what every run did cannot. It asks the age of the copy on disk rather than counting from a
+  timer, so a daemon restarted with every image rebuild still reaches the deadline, and it stages
+  under `.part` so last week's copy is never removed before this week's has worked.
+- **Docker Compose**, for the reader who has one of those and not systemd. `docker compose up -d
+  --build` — a build rather than a pull, because the image carries Google Chrome and is not ours
+  to publish. Paths, port and zone come from the environment so a `git pull` leaves them alone,
+  and the file sets `container` itself: Docker, unlike Podman, tells the process nothing about
+  being supervised, and without it the settings page hides the Restart button.
+- **Two installation guides instead of one**, `deploy/compose.md` and `deploy/quadlet.md`, each
+  followable end to end. The shared notes — why Google Chrome and not Chromium, the sandbox
+  fallback, the stale profile lock — stay in `deploy/README.md`, which is now the chooser.
+- **DESIGN.md brought up to date with what was built**: https as an off-by-default setting and
+  the reversal of the plain-HTTP recommendation that preceded it, the Restart button and the
+  `container` marker, the health check following the scheme, the version constant, Compose, and
+  the deployment section rewritten for a reader who does not have the box it was written on.
+
+## 0.1.0 — 2026-08-13
+
+First tagged release, and the first public one. It has been backing up a real library of around
+96,000 items across 181 albums since 2026-08-10.
+
+- **Backups.** Daily on a schedule, resuming an interrupted run rather than starting the day
+  again. Files land in a pool laid out by capture date with EXIF and GPS untouched and videos
+  untranscoded; `<photos>/albums/` is a symlink view of the same pool.
+- **Curation.** Follow an album in full, follow only the items you pick, or leave it alone;
+  whole-library backup with an optional "taken since" date. Selections live in the database, so
+  paging through a ten-thousand-item album keeps them.
+- **The pages.** Album list with sorting, favourites and search; per-album grid with click and
+  shift-click picking; live progress while a run works; a history of past runs with counts, bytes
+  and outcomes; a review queue for items that appeared in a picked album after it was curated.
+- **Sessions.** The Google session is warmed on a schedule, and when that is no longer enough you
+  sign in through an embedded browser from a phone without touching the server.
+- **Home Assistant.** Twelve sensors, two buttons and a library selector arrive over MQTT
+  Discovery as one device; the buttons go through the same one-run-at-a-time rule as the pages.
+- **https, optionally.** Off by default. A certificate gpb writes for the address you browse to,
+  or one you provide; the address follows the setting, and the container's health check follows it
+  too, trusting the certificate the config names rather than a trust store that has never heard
+  of it.
+- **Restart from the settings page**, since the schedule, the limits and encryption are read once
+  at startup. Offered only where something would start gpb again.
+- **`gpb version`**, and a version line at the head of every start in the log.
+
+Known gaps: no `verify` sweep over what is already on disk, and no scheduled database backup.

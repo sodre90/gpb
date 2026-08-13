@@ -1,0 +1,786 @@
+/* gpb web UI — proposed stylesheet. Written to drop into internal/web/static/ as app.css.
+   Everything chromatic goes through the tokens below; they are measured for WCAG AA as text
+   on both surfaces, so a colour picked from here is safe by construction. */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: light-dark(#fdfdfc, #15171b);
+  --surface: light-dark(#ffffff, #1c1f24);
+  --ink: light-dark(#1b1d21, #e8e8e6);
+  --muted: light-dark(#5d6167, #9a9ea6);
+  --line: color-mix(in srgb, currentColor 18%, transparent);
+  --tint: color-mix(in srgb, currentColor 5%, transparent);
+
+  --ok: light-dark(#1a7f4b, #4cc38a);
+  --warn: light-dark(#9a6700, #e2b93d);
+  --danger: light-dark(#c0392b, #e5726a);
+  --accent: light-dark(#15619e, #6cb2e8);
+
+  --t-caption: 0.75rem;
+  --t-small: 0.875rem;
+  --t-body: 1rem;
+  --t-h2: 1.125rem;
+  --t-h1: 1.375rem;
+
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.5rem;
+  --s-6: 2.5rem;
+
+  --radius: 8px;
+  --radius-s: 4px;
+}
+
+/* ---------- base ---------- */
+
+body {
+  font: var(--t-body)/1.5 system-ui, sans-serif;
+  margin: 0;
+  padding: 0 var(--s-4) var(--s-6);
+  background: var(--bg);
+  color: var(--ink);
+}
+
+main {
+  max-width: 52rem;
+  margin: 0 auto;
+}
+
+main:has(.grid) {
+  max-width: 80rem;
+}
+
+h1 {
+  font-size: var(--t-h1);
+  margin: var(--s-5) 0 var(--s-4);
+}
+
+h2 {
+  font-size: var(--t-h2);
+  margin: 0 0 var(--s-2);
+}
+
+a {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: var(--t-small);
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.date {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.wrap {
+  overflow-wrap: anywhere;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip {
+  position: absolute;
+  left: -100vw;
+}
+
+.skip:focus {
+  position: static;
+  display: inline-block;
+  padding: var(--s-1) var(--s-2);
+}
+
+/* ---------- top bar ---------- */
+
+.topbar {
+  border-bottom: 1px solid var(--line);
+  margin: 0 calc(-1 * var(--s-4));
+  padding: 0 var(--s-4);
+}
+
+.topbar nav {
+  display: flex;
+  gap: var(--s-4);
+  align-items: baseline;
+  flex-wrap: wrap;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: var(--s-3) 0;
+  font-size: var(--t-small);
+}
+
+.topbar a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.topbar a:hover {
+  text-decoration: underline;
+}
+
+.topbar a[aria-current="page"] {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.topbar .brand {
+  font-weight: 600;
+  font-size: var(--t-body);
+}
+
+.topbar form {
+  margin-left: auto;
+}
+
+/* The nav's review pill: a number, not a colour, so it never has to be "understood". */
+.count {
+  display: inline-block;
+  min-width: 1.2em;
+  padding: 0 0.35em;
+  border-radius: 999px;
+  background: var(--warn);
+  color: var(--bg);
+  font-size: var(--t-caption);
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ---------- banners ---------- */
+
+.banner {
+  display: block;
+  margin: var(--s-4) 0;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--muted);
+  border-radius: var(--radius-s);
+  background: var(--tint);
+}
+
+.banner.success {
+  border-left-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+
+.banner.warn {
+  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+
+.banner.danger {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+/* The session banner sits above <main> and spans every page. */
+.session-banner {
+  max-width: 52rem;
+  margin: var(--s-4) auto 0;
+}
+
+/* ---------- buttons and form controls ---------- */
+
+button,
+.btn {
+  font: inherit;
+  font-size: var(--t-small);
+  padding: var(--s-2) var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+button:hover,
+.btn:hover {
+  background: var(--tint);
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+button.primary:hover {
+  background: color-mix(in srgb, var(--accent) 88%, var(--ink));
+}
+
+button.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+  font-size: inherit;
+}
+
+select,
+input[type="date"],
+input[type="text"],
+input[type="search"],
+input[type="password"] {
+  font: inherit;
+  font-size: var(--t-small);
+  padding: var(--s-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  color: inherit;
+}
+
+input[type="password"] {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: var(--s-3);
+}
+
+label {
+  font-weight: 600;
+}
+
+form p label,
+form > label {
+  display: block;
+  margin-bottom: var(--s-1);
+}
+
+.actions {
+  display: flex;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  align-items: center;
+  margin: var(--s-4) 0;
+}
+
+.actions form {
+  margin: 0;
+}
+
+form.mode {
+  display: flex;
+  gap: var(--s-1);
+  margin: 0;
+}
+
+form.mode label {
+  font-weight: 400;
+}
+
+/* ---------- cards ---------- */
+
+.card {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--s-4);
+  margin: var(--s-4) 0;
+}
+
+.card-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-4);
+}
+
+.card-row .card {
+  margin: 0;
+}
+
+/* ---------- stats and meter ---------- */
+
+.stats {
+  display: flex;
+  gap: var(--s-5);
+  flex-wrap: wrap;
+  margin: var(--s-3) 0;
+}
+
+.stat {
+  min-width: 5.5rem;
+}
+
+/* The number wears ink, never a status colour: the label under it says what it is,
+   and a wall of coloured figures reads as alarm before it reads as information. */
+.stat .value {
+  display: block;
+  font-size: var(--t-h1);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat .label {
+  display: block;
+  font-size: var(--t-small);
+  color: var(--muted);
+}
+
+.stat.bad .value {
+  color: var(--danger);
+}
+
+.meter {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--tint);
+  overflow: hidden;
+  margin: var(--s-3) 0 var(--s-2);
+}
+
+.meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.meter.indeterminate > span {
+  width: 30%;
+  animation: sweep 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes sweep {
+  from { margin-left: 0; }
+  to { margin-left: 70%; }
+}
+
+/* ---------- badges, outcomes, state ---------- */
+
+.badge {
+  display: inline-block;
+  font-size: var(--t-caption);
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  margin-left: var(--s-1);
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.badge.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.badge.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.badge.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.outcome {
+  font-weight: 600;
+}
+
+.outcome.ok { color: var(--ok); }
+.outcome.partial, .outcome.drift { color: var(--warn); }
+.outcome.error, .outcome.auth_required { color: var(--danger); }
+
+.error { color: var(--danger); }
+
+.state {
+  font-weight: 600;
+}
+
+.state.ok::before { content: "● "; color: var(--ok); }
+.state.bad::before { content: "● "; color: var(--danger); }
+
+/* ---------- tables ---------- */
+
+table.albums,
+table.runs {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.albums th,
+table.albums td,
+table.runs th,
+table.runs td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+table.runs td {
+  font-size: var(--t-small);
+}
+
+table.albums tr.followed td {
+  background: var(--tint);
+}
+
+table.albums tr.saved td {
+  animation: saved 1.2s ease-out;
+}
+
+@keyframes saved {
+  from { background: color-mix(in srgb, var(--ok) 30%, transparent); }
+}
+
+table.albums th.cover,
+table.albums td.cover {
+  width: 48px;
+  padding-right: 0;
+}
+
+table.albums td.cover img,
+table.albums td.cover .fakecover,
+table.albums td.cover .nocover {
+  display: block;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-s);
+  object-fit: cover;
+  background: var(--tint);
+}
+
+/* An error detail under a run gets its own row, indented under the outcome. */
+table.runs td.detail {
+  padding-top: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+
+a.sort {
+  color: inherit;
+  text-decoration: none;
+}
+
+a.sort:hover {
+  text-decoration: underline;
+}
+
+.arrow {
+  opacity: 0.7;
+}
+
+/* Key-value table, e.g. the Google page's diagnostics. */
+table.kv {
+  border-collapse: collapse;
+}
+
+table.kv th,
+table.kv td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--s-1) var(--s-4) var(--s-1) 0;
+  font-size: var(--t-small);
+}
+
+table.kv th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- disclosure (bundles) ---------- */
+
+.bundles > .disclosure {
+  display: inline-block;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+}
+
+.bundles > .disclosure:hover {
+  text-decoration: underline;
+}
+
+.bundles > table {
+  margin-top: var(--s-3);
+}
+
+details.diagnostics summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--t-small);
+}
+
+/* ---------- item grid ---------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--s-2);
+  margin: var(--s-4) 0;
+}
+
+.cell {
+  position: relative;
+  margin: 0;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--tint);
+}
+
+.cell label {
+  display: block;
+  font-weight: 400;
+  cursor: inherit;
+}
+
+/* The checkbox is the cell's real control: Tab reaches it, Space toggles it, and with no
+   script at all the surrounding form still posts it. Hidden visually because the tick
+   overlay is its face. */
+.cell input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.cell:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cell .thumb {
+  display: block;
+  width: 100%;
+  height: 9rem;
+  object-fit: cover;
+  background-color: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+/* Pictures arrive from Google one throttled request at a time, so a cell can sit empty for
+   seconds. A still grey square reads as broken; a moving one reads as coming. */
+.thumb.loading {
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, currentColor 20%, transparent) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.cell figcaption {
+  font-size: var(--t-caption);
+  padding: var(--s-1) var(--s-2);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.grid.picking .cell {
+  cursor: pointer;
+  user-select: none;
+}
+
+.grid.picking .cell:has(:checked) {
+  border-color: var(--ok);
+}
+
+.grid.picking .tick {
+  position: absolute;
+  top: 0.3rem;
+  left: 0.3rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 3px #0009;
+  background: #0006;
+}
+
+.grid.picking .cell:has(:checked) .tick {
+  background: var(--ok);
+}
+
+.grid.picking .cell:has(:checked) .tick::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1.1rem;
+  text-align: center;
+}
+
+.marks {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  display: flex;
+  gap: 0.2rem;
+}
+
+.mark {
+  display: inline-block;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  line-height: 1.1rem;
+  text-align: center;
+  font-size: var(--t-caption);
+  border-radius: 3px;
+  background: #000a;
+  color: #fff;
+}
+
+.mark.done { background: color-mix(in srgb, var(--ok) 85%, #000); }
+.mark.failed { background: color-mix(in srgb, var(--danger) 85%, #000); }
+.mark.gone { background: color-mix(in srgb, var(--warn) 75%, #000); }
+
+.pager {
+  display: flex;
+  gap: var(--s-4);
+  align-items: center;
+  justify-content: center;
+  margin: var(--s-4) 0;
+  font-size: var(--t-small);
+}
+
+/* ---------- empty states ---------- */
+
+.empty {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  padding: var(--s-6) var(--s-4);
+  margin: var(--s-4) 0;
+  text-align: center;
+}
+
+.empty p {
+  margin: 0 0 var(--s-3);
+  color: var(--muted);
+}
+
+.empty form {
+  margin: 0;
+}
+
+/* ---------- page-specific small pieces ---------- */
+
+.library-form {
+  display: flex;
+  gap: var(--s-2);
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin: var(--s-3) 0 0;
+}
+
+.library-form label {
+  font-weight: 400;
+}
+
+.crumbs {
+  margin: var(--s-3) 0 0;
+  font-size: var(--t-small);
+}
+
+.filter {
+  margin-left: auto;
+}
+
+iframe.vnc,
+.vnc {
+  width: 100%;
+  height: 70vh;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: var(--s-4) 0;
+  box-sizing: border-box;
+}
+
+.login-page main {
+  max-width: 22rem;
+  margin-top: 12vh;
+}
+
+/* Preview scaffolding only: the strip that links a prototype page back to the index.
+   Not part of the shipped stylesheet. */
+.preview-note {
+  max-width: 52rem;
+  margin: var(--s-6) auto 0;
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+  font-size: var(--t-caption);
+  color: var(--muted);
+}
+
+/* ---------- narrow screens ---------- */
+
+@media (max-width: 40rem) {
+  .card-row {
+    grid-template-columns: 1fr;
+  }
+
+  .stats {
+    gap: var(--s-4);
+  }
+
+  .stat {
+    min-width: 40%;
+  }
+
+  /* Created and Items are the columns a phone can live without; title, progress and the
+     mode selector are the page's point. */
+  table.albums .col-created,
+  table.albums .col-items {
+    display: none;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  }
+
+  .cell .thumb {
+    height: 6.5rem;
+  }
+
+  iframe.vnc,
+  .vnc {
+    height: 60vh;
+  }
+}
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .thumb.loading,
+  .meter.indeterminate > span,
+  table.albums tr.saved td {
+    animation: none;
+  }
+}

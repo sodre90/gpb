@@ -1,0 +1,8 @@
+.git
+.gitignore
+spike
+deploy/*
+!deploy/entrypoint.sh
+DESIGN.md
+README.md
+*.md

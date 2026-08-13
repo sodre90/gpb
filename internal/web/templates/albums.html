@@ -1,0 +1,187 @@
+{{define "albumrow"}}
+<tr class="{{if ne .Mode "none"}}albums-followed{{end}}" data-title="{{.DisplayTitle}}">
+  {{/* The state is on the button rather than in a class, so the star says what it means to a
+       screen reader as well as to an eye, and the stylesheet colours it from the same fact. */}}
+  <td class="albums-star">
+    <form method="post" action="/album/{{.ID}}/favourite{{.Query}}">
+      <input type="hidden" name="favourite" value="{{if .Favourite}}no{{else}}yes{{end}}">
+      <button type="submit" aria-pressed="{{if .Favourite}}true{{else}}false{{end}}"
+              aria-label="Favourite {{.DisplayTitle}}">{{if .Favourite}}★{{else}}☆{{end}}</button>
+    </form>
+  </td>
+  <td class="albums-cover">
+    <a href="/album/{{.ID}}">
+      {{if .HasCover}}
+        <img class="thumb loading" src="/album/{{.ID}}/cover" alt="" loading="lazy" width="48" height="48">
+      {{else}}
+        <span class="albums-nocover"></span>
+      {{end}}
+    </a>
+  </td>
+  <td>
+    <a href="/album/{{.ID}}">{{if .Title}}{{.Title}}{{else}}<em>{{.DisplayTitle}}</em>{{end}}</a>
+    {{with .Badge}}<span class="badge">{{.}}</span>{{end}}
+    {{if .NeedsReview}}<span class="badge warn"><a href="/review">{{.NeedsReview}} to review</a></span>{{end}}
+    {{if .Missing}}<span class="badge danger">{{.Missing}} gone from Google</span>{{end}}
+    {{if .NothingPicked}}<span class="badge warn">nothing picked</span>{{end}}
+  </td>
+  <td class="date albums-created">{{.Created}}</td>
+  <td class="num albums-items">{{count .ItemCount}}</td>
+  <td class="albums-progress">
+    {{if eq .Mode "none"}}
+      <span class="muted">—</span>
+    {{else}}
+      {{count .Done}} done
+      {{if eq .Mode "picked"}}<span class="muted">of {{count .Picked}} picked</span>{{end}}
+      {{if .Pending}}<span class="muted">· {{count .Pending}} to go</span>{{end}}
+      {{if .Failed}}<span class="error">· {{count .Failed}} failed</span>{{end}}
+    {{end}}
+  </td>
+  <td>
+    <form method="post" action="/album/{{.ID}}/mode{{.Query}}" class="mode-form">
+      <select name="mode" aria-label="Backup mode for {{.DisplayTitle}}">
+        <option value="none" {{if eq .Mode "none"}}selected{{end}}>No</option>
+        <option value="all" {{if eq .Mode "all"}}selected{{end}}>Everything</option>
+        <option value="picked" {{if eq .Mode "picked"}}selected{{end}}>Picked items</option>
+      </select>
+      <button type="submit">Save</button>
+    </form>
+  </td>
+</tr>
+{{end}}
+
+{{define "albumtally"}}<p class="muted small" id="tally">{{quantity .Count "album"}}, {{count .Followed}} under backup.</p>{{end}}
+
+{{/* The run banner and the buttons it hides, and nothing else on this page. The rows below are a
+     wall of open selectors, so they stay exactly as the reader left them until they say otherwise.
+     The sort order rides along in the fragment's own URL, since the forms in here post back to it. */}}
+{{define "albumsnow"}}
+<div id="live-albums-now" data-live="run progress" data-live-src="/live/albums/now{{.Query}}">
+  <div class="actions">
+    {{if not .Running}}
+      <form method="post" action="/sync{{.Query}}"><button type="submit" class="primary">Back up now</button></form>
+      <form method="post" action="/albums/refresh{{.Query}}"><button type="submit">Refresh album list</button></form>
+    {{end}}
+  </div>
+
+  {{with .Now}}
+  <p class="banner" role="status">
+    {{.Activity}} in progress — {{count .Listed}} listed, {{count .Downloaded}} downloaded.
+    <a href="/runs">Watch it on Activity</a>. Choosing albums here is safe meanwhile; the next run
+    applies whatever this page is left saying.
+  </p>
+  {{end}}
+</div>
+{{end}}
+
+{{define "albumheadings"}}
+<thead>
+  <tr>
+    <th class="albums-star"><span class="sr-only">Favourite</span></th>
+    <th class="albums-cover"></th>
+    {{range .}}
+    <th class="{{if .Numeric}}num {{end}}{{.Class}}"{{with .Sort}} aria-sort="{{.}}"{{end}}>
+      <a class="albums-sort" href="{{.Link}}">{{.Label}}{{with .Indicator}} <span class="arrow" aria-hidden="true">{{.}}</span>{{end}}</a>
+    </th>
+    {{end}}
+  </tr>
+</thead>
+{{end}}
+
+{{define "content"}}
+{{with .Data}}
+
+{{template "albumsnow" .}}
+
+{{with .Library}}
+<section class="card albums-library">
+  <h2>Your whole library</h2>
+  <p class="muted">
+    Every photo and video in the account, including the ones that are in no album — on a real
+    library that is most of them. Backing this up needs no album at all; pick a date to start
+    from, or leave it empty to go as far back as the library goes.
+  </p>
+  <form method="post" action="/library{{.Query}}" class="library-form">
+    <label for="library-mode">Back up</label>
+    <select id="library-mode" name="mode">
+      <option value="none" {{if eq .Mode "none"}}selected{{end}}>No</option>
+      <option value="all" {{if eq .Mode "all"}}selected{{end}}>Everything</option>
+    </select>
+    <label for="library-since">taken since</label>
+    <input id="library-since" type="date" name="since" value="{{.Since}}">
+    <button type="submit">Save</button>
+  </form>
+  {{if .Following}}
+  <p class="small">
+    {{count .Known}} found so far, {{count .Done}} backed up
+    {{if .Pending}}<span class="muted">· {{count .Pending}} to go</span>{{end}}
+    {{if .Failed}}<span class="error">· {{count .Failed}} failed</span>{{end}}
+    {{if .LastSynced}}<span class="muted">· last walked {{.LastSynced}}</span>{{end}}
+  </p>
+  {{end}}
+</section>
+{{end}}
+
+{{/* The two ways of cutting 181 albums down to the one being looked for, kept together so
+     neither is a control nobody finds. The header stays on the page when the filter empties the
+     table, or the only way back would be the browser's own back button. */}}
+{{if or .Albums .FavouritesOnly}}
+<div class="albums-filters">
+  <div class="albums-search" id="filterbox" hidden>
+    <label for="filter">Find an album</label>
+    <input type="search" id="filter" autocomplete="off" placeholder="part of a title">
+  </div>
+  <a class="albums-favourites" href="{{.FavouritesLink}}"{{if .FavouritesOnly}} aria-current="true"{{end}}>
+    ★ Favourites{{if .Favourites}} ({{.Favourites}}){{end}}
+  </a>
+</div>
+{{end}}
+
+{{if .Albums}}
+<table class="card albums">
+  {{template "albumheadings" .Columns}}
+  <tbody>
+  {{range .Albums}}{{template "albumrow" .}}{{end}}
+  </tbody>
+</table>
+{{template "albumtally" .Tally}}
+{{else if not .Bundles}}
+  {{if .FavouritesOnly}}
+<section class="empty">
+  <p>Nothing is a favourite yet. Star an album with the ☆ beside its name: favourites lead the
+    list however it is sorted, and a backup fetches them before anything else.</p>
+</section>
+  {{else}}
+<section class="empty">
+  <p>No albums known yet — ask Google what this account has.</p>
+  <form method="post" action="/albums/refresh"><button type="submit" class="primary">Refresh album list</button></form>
+</section>
+  {{end}}
+{{end}}
+
+{{if .Bundles}}
+<section class="card bundles">
+  <a class="bundles-disclosure" href="{{.BundlesLink}}">
+    <span class="arrow" aria-hidden="true">{{if .BundlesOpen}}▾{{else}}▸{{end}}</span>
+    Shared photos ({{len .Bundles}})
+  </a>
+  {{if .BundlesOpen}}
+  <p class="muted small">
+    Sets of photos shared into or out of this account. Google gives these no name, so they are
+    listed by who shared them.
+  </p>
+  <table class="albums">
+    {{template "albumheadings" $.Data.Columns}}
+    <tbody>
+    {{range .Bundles}}{{template "albumrow" .}}{{end}}
+    </tbody>
+  </table>
+  {{end}}
+</section>
+{{end}}
+
+<script src="/static/saving.js" defer></script>
+<script src="/static/albums.js" defer></script>
+
+{{end}}
+{{end}}

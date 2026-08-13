@@ -1,0 +1,126 @@
+{{define "pager"}}
+{{if gt .Pages 1}}
+<nav class="pager" aria-label="Grid pages">
+  {{/* An album grid runs oldest first, unlike every-photo which runs newest first, so paging
+       forward here walks towards today. */}}
+  {{if gt .Page 1}}<a href="/album/{{.ID}}?page={{.PrevPage}}">← Older page</a>{{end}}
+  <span class="muted">Page {{.Page}} of {{.Pages}}</span>
+  {{if lt .Page .Pages}}<a href="/album/{{.ID}}?page={{.NextPage}}">Newer page →</a>{{end}}
+</nav>
+{{end}}
+{{end}}
+
+{{/* Only ever rendered over a skeleton grid — an album being walked for the first time, with no
+     cells and so nothing to lose. It stops being live the moment it has cells in it: from then on
+     a re-render would throw away whichever pick was half-made when the message arrived. */}}
+{{define "albumlisting"}}
+<div id="live-album-listing"{{if .Running}} data-live="run" data-live-src="/live/album/{{.ID}}/listing"{{end}}>
+  {{if .Running}}
+  <p class="banner" role="status">{{.Activity}} in progress — this album is being walked.</p>
+  {{/* The skeleton stays until the walk is over. A walk that writes its rows in batches would
+       otherwise swap in the first batch and, being a grid with cells, go inert holding it. */}}
+  <div class="grid grid-skeleton" aria-hidden="true">
+    {{range .Placeholders}}<figure class="grid-cell"></figure>{{end}}
+  </div>
+  {{else}}
+  {{if .Items}}<p class="banner" role="status">This album has been walked — {{quantity .Total "item"}} found.</p>{{end}}
+  {{template "albumgrid" .}}
+  {{end}}
+</div>
+{{end}}
+
+{{define "albumgrid"}}
+{{if .Items}}
+<form method="post" action="/album/{{.ID}}/picks" id="pickform">
+  <input type="hidden" name="page" value="{{.Page}}">
+  {{if .Picking}}
+  <div class="actions" id="picktools" data-album="{{.ID}}">
+    <button type="button" data-scope="album" data-selected="true">Pick all {{count .Total}}</button>
+    <button type="button" data-scope="album" data-selected="false">Clear all</button>
+    <button type="submit" class="primary" id="savepicks">Save picks on this page</button>
+    <p class="muted small">Click a photo to pick it. Shift-click to pick a range.</p>
+  </div>
+  {{end}}
+
+  {{/* A form of checkboxes carries only the ticked ones, so what was unticked can only be known
+       from what was on the page. Saying so here rather than working it out again at save time is
+       what stops a tab left open from clearing a pick made somewhere else since it rendered. */}}
+  {{if .Picking}}{{range .Items}}<input type="hidden" name="shown" value="{{.MediaKey}}">{{end}}{{end}}
+  {{template "pager" .}}
+  <div class="grid{{if .Picking}} grid-picking{{end}}" id="grid">
+    {{range .Items}}{{template "gridcell" (.In "pick")}}{{end}}
+  </div>
+  {{template "pager" .}}
+</form>
+{{else if .Running}}
+<div class="grid grid-skeleton" aria-hidden="true">
+  {{range .Placeholders}}<figure class="grid-cell"></figure>{{end}}
+</div>
+{{else}}
+<section class="empty">
+  {{if eq .UpstreamTotal 0}}
+    <p>Google says this album is empty.</p>
+  {{else}}
+    <p>Nothing listed for this album yet.</p>
+    <form method="post" action="/album/{{.ID}}/refresh">
+      <button type="submit" class="primary">Refresh from Google</button>
+    </form>
+  {{end}}
+</section>
+{{end}}
+{{end}}
+
+{{define "content"}}
+{{with .Data}}
+
+<p class="crumbs"><a href="/albums">← All albums</a></p>
+
+<p class="muted">
+  {{quantity .Total "item"}}{{if .Picking}} · <span id="pickcount">{{count .Picked}}</span> picked{{end}}
+  {{if .Total}} · {{count .BackedUp}} backed up{{end}}
+  {{with .Badge}} · <span class="badge">{{.}}</span>{{end}}
+</p>
+
+<div class="actions">
+  <form method="post" action="/album/{{.ID}}/grid-mode" class="mode-form">
+    <input type="hidden" name="page" value="{{.Page}}">
+    <label for="grid-mode">Back up</label>
+    <select id="grid-mode" name="mode">
+      <option value="none" {{if eq .Mode "none"}}selected{{end}}>Nothing</option>
+      <option value="all" {{if eq .Mode "all"}}selected{{end}}>Everything</option>
+      <option value="picked" {{if eq .Mode "picked"}}selected{{end}}>Picked items</option>
+    </select>
+    <button type="submit">Save</button>
+  </form>
+  {{if not .Running}}
+    <form method="post" action="/album/{{.ID}}/refresh">
+      <input type="hidden" name="page" value="{{.Page}}">
+      <button type="submit">Refresh from Google</button>
+    </form>
+  {{end}}
+</div>
+
+{{if and .Running (not .Listing)}}
+  {{/* A grid that already has cells is never swapped under the reader, so a run that is adding
+       to one says what it is doing and leaves the page alone. */}}
+  <p class="banner" role="status">{{.Activity}} in progress — reload to see what it has walked so far.</p>
+{{end}}
+
+{{if not .Picking}}
+<p class="banner" role="status">
+  {{if eq .Mode "all"}}Every item in this album is backed up — switch to “picked items” to choose
+  individually.{{else}}This album is not backed up. Choose a mode above to start.{{end}}
+</p>
+{{end}}
+
+{{if .Listing}}
+  {{template "albumlisting" .}}
+{{else}}
+  {{template "albumgrid" .}}
+{{end}}
+
+{{end}}
+<script src="/static/saving.js" defer></script>
+<script src="/static/viewer.js" defer></script>
+<script src="/static/grid.js" defer></script>
+{{end}}

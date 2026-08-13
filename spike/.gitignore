@@ -1,0 +1,8 @@
+captures/
+probe-*
+spike
+*.jpg
+*.jpeg
+*.heic
+*.mp4
+*.mov

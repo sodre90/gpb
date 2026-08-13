@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gpb web UI — design preview</title>
+<link rel="stylesheet" href="preview.css">
+</head>
+<body>
+<main>
+  <h1>gpb web UI — design preview</h1>
+  <p class="muted">Static prototype of the design in <code>design/WEB-DESIGN.md</code>. Every
+     page is plain HTML on one stylesheet (<code>preview.css</code>, the proposed real one) —
+     click through with the nav exactly as the app would work. All names, photos and numbers
+     are invented. Try it at 360px and with the OS in dark mode; both are part of the design.</p>
+<section class="card">
+  <h2>Overview</h2>
+  <table class="kv">
+    <tr><th><a href="overview.html">overview.html</a></th><td>The healthy everyday state: backup totals with a meter, last run, session, review count.</td></tr>
+    <tr><th><a href="overview-first-run.html">overview-first-run.html</a></th><td>First run — nothing followed, no runs; the empty state teaches the setup order.</td></tr>
+    <tr><th><a href="overview-signed-out.html">overview-signed-out.html</a></th><td>Google session dead: global danger banner, red session card, run stopped on auth_required.</td></tr>
+  </table>
+</section>
+<section class="card">
+  <h2>Albums</h2>
+  <table class="kv">
+    <tr><th><a href="albums.html">albums.html</a></th><td>132 albums + 49 shared bundles at real scale; filter box (type to try it), library card, sortable table, followed-first.</td></tr>
+    <tr><th><a href="albums-empty.html">albums-empty.html</a></th><td>Fresh install — no albums fetched yet; empty state with the one action that helps.</td></tr>
+  </table>
+</section>
+<section class="card">
+  <h2>Album grid</h2>
+  <table class="kv">
+    <tr><th><a href="album-grid.html">album-grid.html</a></th><td>Picking mode, 200 cells: checkboxes (Tab + Space work), shift-click ranges, state marks, shimmer on still-loading cells, pager at both ends.</td></tr>
+    <tr><th><a href="album-grid-empty.html">album-grid-empty.html</a></th><td>Opened before anyone listed it: auto-listing banner over a skeleton grid instead of a blank page.</td></tr>
+  </table>
+</section>
+<section class="card">
+  <h2>Activity</h2>
+  <table class="kv">
+    <tr><th><a href="runs.html">runs.html</a></th><td>A run in flight (live card with moving counts) over the history table — ok, partial, auth_required, interrupted and drift rows, each with its detail line.</td></tr>
+    <tr><th><a href="runs-empty.html">runs-empty.html</a></th><td>No runs yet.</td></tr>
+  </table>
+</section>
+<section class="card">
+  <h2>Review</h2>
+  <table class="kv">
+    <tr><th><a href="review.html">review.html</a></th><td>Both queues: new items in picked albums (approve/dismiss) and items gone from Google (acknowledge).</td></tr>
+    <tr><th><a href="review-empty.html">review-empty.html</a></th><td>Empty queue explains what would appear here.</td></tr>
+  </table>
+</section>
+<section class="card">
+  <h2>Google</h2>
+  <table class="kv">
+    <tr><th><a href="google.html">google.html</a></th><td>Signed in: one status line, check-now, diagnostics behind a disclosure.</td></tr>
+    <tr><th><a href="google-signed-out.html">google-signed-out.html</a></th><td>Needs sign-in: what happens next in plain words, password-confirm card.</td></tr>
+    <tr><th><a href="google-reauth-running.html">google-reauth-running.html</a></th><td>The login browser open: noVNC canvas stand-in, Done button, idle-timeout note.</td></tr>
+  </table>
+</section>
+<section class="card">
+  <h2>Other</h2>
+  <table class="kv">
+    <tr><th><a href="settings.html">settings.html</a></th><td>The deferred settings page, designed now so the IA has a place for it.</td></tr>
+    <tr><th><a href="login.html">login.html</a></th><td>The one unauthenticated page, centred card.</td></tr>
+  </table>
+</section>
+</main>
+</body>
+</html>

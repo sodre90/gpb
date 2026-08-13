@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Albums · gpb</title>
+<link rel="stylesheet" href="preview.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <nav aria-label="Main">
+    <a class="brand" href="index.html">gpb</a>
+    <a href="overview.html">Overview</a>
+    <a href="albums.html" aria-current="page">Albums</a>
+    <a href="runs.html">Activity</a>
+    <a href="review.html">Review</a>
+    <a href="google.html">Google</a>
+    <a href="settings.html">Settings</a>
+    <form><button type="button" class="btn-link">Log out</button></form>
+  </nav>
+</header>
+<main id="main">
+<h1>Albums</h1>
+
+<section class="card">
+  <h2>Your whole library</h2>
+  <p class="small muted">Every photo and video in the account, including the ones in no album.
+     You can turn this on before any album is listed.</p>
+  <form class="library-form">
+    <label for="library-mode">Back up</label>
+    <select id="library-mode"><option selected>No</option><option>Everything</option></select>
+    <label for="library-since">taken since</label>
+    <input id="library-since" type="date">
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+<section class="empty">
+  <h2>No albums known yet</h2>
+  <p>gpb has not asked Google for your album list. Fetching it takes a few seconds and
+     downloads nothing.</p>
+  <form action="albums.html"><button class="primary" type="submit">Refresh album list</button></form>
+</section>
+</main>
+<p class="preview-note"><a href="index.html">← All preview screens</a> · every name, number and photo on this page is invented sample data.</p>
+<script src="preview.js" defer></script>
+</body>
+</html>

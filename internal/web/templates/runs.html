@@ -1,0 +1,64 @@
+{{define "content"}}
+{{with .Data}}
+{{template "livenow" .Now}}
+{{template "runhistory" .}}
+{{end}}
+{{end}}
+
+{{/* livenow is a container that outlives the card inside it. The card itself comes and goes with
+     the run; the container stays so that a run starting has somewhere to appear on a page nobody
+     reloaded. */}}
+{{define "livenow"}}
+<div id="live-now" data-live="run progress" data-live-src="/live/runs/now">
+  {{with .}}{{template "nowcard" .}}{{end}}
+</div>
+{{end}}
+
+{{/* The history follows the run topic but not progress: the counts of a finished run do not move,
+     and re-rendering fifty rows every second to learn that would be a waste of both ends. */}}
+{{define "runhistory"}}
+<div id="live-history" data-live="run" data-live-src="/live/runs/history">
+{{if .History}}
+<h2>History</h2>
+<table class="runs">
+  <thead>
+    <tr>
+      <th>Started</th><th>Outcome</th><th class="num">Listed</th>
+      <th class="num">Downloaded</th><th class="num">Failed</th><th class="num">Size</th>
+    </tr>
+  </thead>
+  <tbody>
+  {{range .History}}
+    <tr>
+      <td class="date">{{.StartedAt}}</td>
+      <td>
+        {{if .Finished}}<span class="outcome {{.Outcome}}">{{.Outcome}}</span>
+        {{else if .StillGoing}}<span class="badge">still going</span>
+        {{else}}<span class="badge warn">interrupted</span>{{end}}
+      </td>
+      {{if .Finished}}
+        <td class="num">{{count .Listed}}</td>
+        <td class="num">{{count .Downloaded}}</td>
+        <td class="num">{{count .Failed}}</td>
+        <td class="num">{{if .Size}}{{.Size}}{{else}}—{{end}}</td>
+      {{else}}
+        <td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+      {{end}}
+    </tr>
+    {{if .Interrupted}}
+    <tr><td></td><td colspan="5" class="runs-detail">Started and never finished: the daemon stopped
+      before it could say how it went. Nothing downloaded was lost; the next run picked up where
+      it left off.</td></tr>
+    {{end}}
+    {{with .Error}}<tr><td></td><td colspan="5" class="runs-detail wrap">{{.}}</td></tr>{{end}}
+  {{end}}
+  </tbody>
+</table>
+{{else if not .Now}}
+<section class="empty">
+  <p>No runs yet. One starts on its own at the scheduled time.</p>
+  <form method="post" action="/sync"><button type="submit" class="primary">Back up now</button></form>
+</section>
+{{end}}
+</div>
+{{end}}

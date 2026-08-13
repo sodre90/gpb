@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google · gpb</title>
+<link rel="stylesheet" href="preview.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <nav aria-label="Main">
+    <a class="brand" href="index.html">gpb</a>
+    <a href="overview.html">Overview</a>
+    <a href="albums.html">Albums</a>
+    <a href="runs.html">Activity</a>
+    <a href="review.html" aria-label="Review, 8 waiting">Review <span class="count" aria-hidden="true">8</span></a>
+    <a href="google.html" aria-current="page">Google</a>
+    <a href="settings.html">Settings</a>
+    <form><button type="button" class="btn-link">Log out</button></form>
+  </nav>
+</header>
+<div class="banner danger session-banner" role="alert">
+  <strong>Google has signed this session out — backups are paused.</strong>
+  You can still choose albums; the next run applies your changes.
+  <a href="google-signed-out.html">Open the Google page to sign in again</a>.
+</div>
+<main id="main">
+<h1>Google</h1>
+
+<p class="state bad">Needs sign-in <span class="muted small">· since yesterday 22:41</span></p>
+<p>Backups are paused until you sign in again. Signing in opens a real Chrome on the server,
+   shown right here — you complete Google's own login in it, phone prompt and all, and it
+   closes itself when you are done.</p>
+
+<form action="google-reauth-running.html" class="card">
+  <label for="password">Confirm your password to open it</label>
+  <input type="password" id="password" name="password" autocomplete="current-password" required>
+  <button class="primary" type="submit">Start browser login</button>
+</form>
+
+<details class="diagnostics">
+  <summary>Diagnostics</summary>
+  <table class="kv">
+    <tr><th>Cookies held</th><td>38</td></tr>
+    <tr><th>Chrome sandbox</th><td>on</td></tr>
+    <tr><th>Browser user agent</th><td class="wrap">Mozilla/5.0 (X11; Linux x86_64) FakeChrome/139.0</td></tr>
+    <tr><th>Last warmup</th><td>today 06:12:04</td></tr>
+  </table>
+</details>
+</main>
+<p class="preview-note"><a href="index.html">← All preview screens</a> · every name, number and photo on this page is invented sample data.</p>
+<script src="preview.js" defer></script>
+</body>
+</html>

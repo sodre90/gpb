@@ -1,0 +1,65 @@
+{{define "ticktools"}}
+<span class="grid-ticktools" hidden>
+  <button type="button" data-ticked="true">Select all</button>
+  <button type="button" data-ticked="false">Clear all</button>
+</span>
+{{end}}
+
+{{define "content"}}
+{{with .Data}}
+
+{{if .Empty}}
+<section class="empty">
+  <p>Nothing is waiting. New photos in albums you pick from, and photos Google has lost, turn
+     up here.</p>
+  <p><a href="/albums">Back to the albums</a></p>
+</section>
+{{end}}
+
+{{if .New}}
+<p class="muted">New items appeared in albums you pick from. Approve to back them up on the next
+   run; dismiss to leave them out. Either way they stop being counted here.</p>
+
+{{range .New}}
+<form method="post" action="/review/resolve">
+  <section class="card">
+    <h2><a href="/album/{{.AlbumID}}">{{.Title}}</a> — {{quantity (len .Cells) "new item"}}</h2>
+    <div class="grid grid-picking">
+      {{range .Cells}}{{template "gridcell" (.In "resolve")}}{{end}}
+    </div>
+    <div class="actions">
+      <button type="submit" class="primary" name="decision" value="approve">Approve selected</button>
+      <button type="submit" name="decision" value="dismiss">Dismiss selected</button>
+      {{template "ticktools"}}
+    </div>
+  </section>
+</form>
+{{end}}
+{{end}}
+
+{{if .Gone}}
+<h2>Gone from Google</h2>
+<p class="muted">These are safe on disk; Google no longer has them. Acknowledging only stops this
+   page counting them — the files stay, always.</p>
+
+{{range .Gone}}
+<form method="post" action="/review/resolve">
+  <section class="card">
+    <h2><a href="/album/{{.AlbumID}}">{{.Title}}</a> — {{quantity (len .Cells) "item"}} gone</h2>
+    <div class="grid grid-picking">
+      {{range .Cells}}{{template "gridcell" (.In "resolve")}}{{end}}
+    </div>
+    <div class="actions">
+      <button type="submit" name="decision" value="acknowledge">Acknowledge</button>
+      {{template "ticktools"}}
+    </div>
+  </section>
+</form>
+{{end}}
+{{end}}
+
+<script src="/static/review.js" defer></script>
+<script src="/static/viewer.js" defer></script>
+
+{{end}}
+{{end}}

@@ -1,0 +1,57 @@
+[
+  [
+    [
+      "AF1QipSharedAlbumOne",
+      ["https://photos.fife.usercontent.google.com/pw/COVER1", 768, 576],
+      null, null, null, null,
+      ["AF1QipActorOne"],
+      [[3], [4]],
+      {
+        "72930366": [
+          1,
+          "Album Shared With Me",
+          [1631224678000, 1631252498000, null, null, 1631443404613, [1631224678000], [1631252498000]],
+          3,
+          null, null,
+          [19997]
+        ]
+      }
+    ],
+    [
+      "AF1QipOwnedAlbumOne",
+      ["https://photos.fife.usercontent.google.com/pw/COVER2", 4000, 3000],
+      null, null, null, null,
+      ["AF1QipActorOne"],
+      [[3], [4], [5]],
+      null, null, null,
+      {
+        "72930366": [
+          1,
+          "An Album I Own",
+          [1500000000000, 1500100000000, null, null, 1767270992307, [1500000000000], [1500100000000]],
+          42,
+          null, null, null, null, null, null,
+          [1]
+        ]
+      }
+    ],
+    [
+      "AF1QipUntitledShared",
+      ["https://photos.fife.usercontent.google.com/pw/COVER3", 100, 100],
+      null, null, null, null,
+      ["AF1QipActorTwo"],
+      [[3]],
+      {
+        "72930366": [
+          1,
+          null,
+          [1600000000000, 1600000001000, null, null, null],
+          7,
+          null, null,
+          [1]
+        ]
+      }
+    ]
+  ],
+  "SHARED-CONTINUATION-TOKEN"
+]

@@ -1,0 +1,68 @@
+{{define "gridcell"}}
+<figure class="grid-cell" data-key="{{.Cell.MediaKey}}" data-caption="{{if .Cell.Filename}}{{.Cell.Filename}} · {{end}}{{.Cell.CapturedAt}}"
+        {{if .Cell.Downloaded}}data-held{{end}}{{if .Cell.IsVideo}} data-video{{end}}>
+  <label>
+    {{if .Field}}
+    <input type="checkbox" name="{{.Field}}" value="{{.Cell.MediaKey}}"{{if .Cell.Picked}} checked{{end}}
+           aria-label="{{if .Cell.Filename}}{{.Cell.Filename}}{{else}}Photo{{end}}, taken {{.Cell.CapturedAt}}">
+    {{end}}
+    <img class="thumb loading" src="/thumb/{{.Cell.MediaKey}}" alt="" loading="lazy" width="256" height="256">
+    <span class="grid-marks">
+      {{with .Cell}}
+      {{if .IsVideo}}<span class="grid-mark video">▶<span class="sr-only">video</span></span>{{end}}
+      {{if .Downloaded}}<span class="grid-mark done">✓<span class="sr-only">backed up</span></span>{{end}}
+      {{if .Failed}}<span class="grid-mark failed">!<span class="sr-only">download failed</span></span>{{end}}
+      {{if .Missing}}<span class="grid-mark gone">†<span class="sr-only">gone from Google</span></span>{{end}}
+      {{if .Review}}<span class="grid-mark review">?<span class="sr-only">needs review</span></span>{{end}}
+      {{end}}
+    </span>
+    <span class="grid-tick" aria-hidden="true"></span>
+    <figcaption>{{.Cell.CapturedAt}}{{if .Cell.Downloaded}} · {{.Cell.Size}}{{end}}</figcaption>
+  </label>
+  {{/* Outside the label on purpose: inside it, opening a photo would also tick it. */}}
+  <button type="button" class="grid-expand" data-open hidden
+          aria-label="Look at {{if .Cell.Filename}}{{.Cell.Filename}}{{else}}the photo{{end}} from {{.Cell.CapturedAt}}">⤢</button>
+</figure>
+{{end}}
+
+{{/* nowcard is the run in flight. It is a block of its own because live.js asks for it on its
+     own, and what the script puts on the page has to be what a reload would have put there. */}}
+{{define "nowcard"}}
+<section class="card" id="nowcard">
+  <h2>Now</h2>
+  <p>{{.Activity}} in progress</p>
+  <div class="stats">
+    <p class="stat"><span class="stat-value">{{count .Listed}}</span> <span class="stat-label">listed</span></p>
+    <p class="stat"><span class="stat-value">{{count .Downloaded}}</span> <span class="stat-label">downloaded</span></p>
+    {{if .Failed}}<p class="stat bad"><span class="stat-value">{{count .Failed}}</span> <span class="stat-label">failed</span></p>{{end}}
+  </div>
+  {{if .Owed}}
+  <div class="progress-row progress-run">
+    <p class="progress-what">This run</p>
+    <div class="meter" role="progressbar" aria-valuenow="{{.Downloaded}}" aria-valuemin="0"
+         aria-valuemax="{{.Owed}}" aria-label="Downloaded this run"><span style="width: {{.Percent}}%"></span></div>
+    <p class="progress-tally">{{count .Downloaded}} / {{count .Owed}}</p>
+  </div>
+  {{end}}
+  {{range .Albums}}
+  <div class="progress-row progress-album">
+    <p class="progress-what">{{.Title}}</p>
+    <div class="meter" role="progressbar" aria-valuenow="{{.Done}}" aria-valuemin="0"
+         aria-valuemax="{{.Known}}" aria-label="{{.Title}} backed up"><span style="width: {{.Percent}}%"></span></div>
+    <p class="progress-tally">{{count .Done}} / {{count .Known}}</p>
+  </div>
+    {{range .Files}}
+    <div class="progress-row progress-file">
+      <p class="progress-what">{{.Filename}}</p>
+      <div class="meter" role="progressbar" aria-valuenow="{{.Percent}}" aria-valuemin="0"
+           aria-valuemax="100" aria-label="{{.Filename}} downloading"><span style="width: {{.Percent}}%"></span></div>
+      <p class="progress-tally">{{if .Sized}}{{.Percent}}%{{else}}{{.Written}}{{end}}</p>
+    </div>
+    {{end}}
+  {{end}}
+  <p class="small muted">
+    {{if .StartedAt}}Started {{.StartedAt}} · {{end}}Google is asked a couple of times a second,
+    on purpose — a backup this size is a slow walk, not a burst.
+  </p>
+</section>
+{{end}}

@@ -1,0 +1,1064 @@
+/* Everything chromatic goes through the tokens below. They were measured for WCAG AA as text
+   on both surfaces, so a colour taken from here is safe by construction — and a colour written
+   as a hex literal anywhere else is a bug waiting for someone to switch to light mode. */
+
+/* A class name says who owns it. There are four kinds and the name itself tells you which:
+
+     grid, card, topbar      a component — the block below the name is the whole of it
+     grid-cell, stat-value   a part of one, written owner-first
+     ok, warn, done          a tone or a state; never worn alone, only beside what it modifies
+     muted, small, num       a utility from the short list below, meaning the same wherever it lands
+
+   A name that is none of those is a name nobody owns, and this is one flat namespace: the Now
+   card's rows, called "progress", once landed on the albums table's "Backed up" cell and took it
+   out of the table's own layout. css_test.go keeps the vocabulary and fails on a class outside
+   it, so adding a component here means naming it there. */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: light-dark(#fdfdfc, #15171b);
+  --surface: light-dark(#ffffff, #1c1f24);
+  --ink: light-dark(#1b1d21, #e8e8e6);
+  --muted: light-dark(#5d6167, #9a9ea6);
+  --line: color-mix(in srgb, currentColor 18%, transparent);
+  --tint: color-mix(in srgb, currentColor 5%, transparent);
+
+  --ok: light-dark(#1a7f4b, #4cc38a);
+  --warn: light-dark(#9a6700, #e2b93d);
+  --danger: light-dark(#c0392b, #e5726a);
+  --accent: light-dark(#15619e, #6cb2e8);
+
+  --t-caption: 0.75rem;
+  --t-small: 0.875rem;
+  --t-body: 1rem;
+  --t-h2: 1.125rem;
+  --t-h1: 1.375rem;
+
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.5rem;
+  --s-6: 2.5rem;
+
+  --radius: 8px;
+  --radius-s: 4px;
+}
+
+/* ---------- base ---------- */
+
+body {
+  font: var(--t-body)/1.5 system-ui, sans-serif;
+  margin: 0;
+  padding: 0 var(--s-4) var(--s-6);
+  background: var(--bg);
+  color: var(--ink);
+}
+
+main {
+  max-width: 52rem;
+  margin: 0 auto;
+}
+
+/* The page is wider than the rest of the app only where a grid needs the room. */
+main:has(.grid) {
+  max-width: 80rem;
+}
+
+h1 {
+  font-size: var(--t-h1);
+  margin: var(--s-5) 0 var(--s-4);
+}
+
+h2 {
+  font-size: var(--t-h2);
+  margin: 0 0 var(--s-2);
+}
+
+a {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Several components lay themselves out with flex or grid, which beats the browser's own
+   [hidden] rule and leaves a "hidden" element on the page. Anything the markup or a script calls
+   hidden is hidden. */
+[hidden] {
+  display: none !important;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: var(--t-small);
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.date {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.wrap {
+  overflow-wrap: anywhere;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  left: -100vw;
+}
+
+.skip-link:focus {
+  position: static;
+  display: inline-block;
+  padding: var(--s-1) var(--s-2);
+}
+
+/* ---------- top bar ---------- */
+
+.topbar {
+  border-bottom: 1px solid var(--line);
+  margin: 0 calc(-1 * var(--s-4));
+  padding: 0 var(--s-4);
+}
+
+.topbar nav {
+  display: flex;
+  gap: var(--s-4);
+  align-items: baseline;
+  flex-wrap: wrap;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: var(--s-3) 0;
+  font-size: var(--t-small);
+}
+
+.topbar a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.topbar a:hover {
+  text-decoration: underline;
+}
+
+.topbar a[aria-current="page"] {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.topbar-brand {
+  font-weight: 600;
+  font-size: var(--t-body);
+}
+
+.topbar form {
+  margin-left: auto;
+}
+
+/* The nav's review pill: a number, not a colour, so it never has to be "understood". */
+.topbar-count {
+  display: inline-block;
+  min-width: 1.2em;
+  padding: 0 0.35em;
+  border-radius: 999px;
+  background: var(--warn);
+  color: var(--bg);
+  font-size: var(--t-caption);
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ---------- banners ---------- */
+
+.banner {
+  display: block;
+  margin: var(--s-4) 0;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--muted);
+  border-radius: var(--radius-s);
+  background: var(--tint);
+}
+
+.banner.success {
+  border-left-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+
+.banner.warn {
+  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+
+.banner.danger {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+/* The session banner spans every page, above the page's own title. */
+.banner-session {
+  max-width: 52rem;
+  margin: var(--s-4) auto 0;
+}
+
+/* ---------- buttons and form controls ---------- */
+
+button,
+.btn {
+  font: inherit;
+  font-size: var(--t-small);
+  padding: var(--s-2) var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+button:hover,
+.btn:hover {
+  background: var(--tint);
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+button.primary:hover {
+  background: color-mix(in srgb, var(--accent) 88%, var(--ink));
+}
+
+button.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+  font-size: inherit;
+}
+
+select,
+input[type="date"],
+input[type="text"],
+input[type="search"],
+input[type="number"],
+input[type="time"],
+input[type="password"] {
+  font: inherit;
+  font-size: var(--t-small);
+  padding: var(--s-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  color: inherit;
+}
+
+input[type="password"] {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: var(--s-3);
+}
+
+label {
+  font-weight: 600;
+}
+
+form p label,
+form > label {
+  display: block;
+  margin-bottom: var(--s-1);
+}
+
+.actions {
+  display: flex;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  align-items: center;
+  margin: var(--s-4) 0;
+}
+
+.actions form {
+  margin: 0;
+}
+
+form.mode-form {
+  display: flex;
+  gap: var(--s-1);
+  margin: 0;
+}
+
+form.mode-form label {
+  font-weight: 400;
+}
+
+/* ---------- cards ---------- */
+
+.card {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--s-4);
+  margin: var(--s-4) 0;
+}
+
+.card-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-4);
+}
+
+.card-row .card {
+  margin: 0;
+}
+
+/* ---------- stats and meter ---------- */
+
+.stats {
+  display: flex;
+  gap: var(--s-5);
+  flex-wrap: wrap;
+  margin: var(--s-3) 0;
+}
+
+.stat {
+  min-width: 5.5rem;
+}
+
+/* The number wears ink, never a status colour: the label under it says what it is, and a wall
+   of coloured figures reads as alarm before it reads as information. */
+.stat-value {
+  display: block;
+  font-size: var(--t-h1);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  display: block;
+  font-size: var(--t-small);
+  color: var(--muted);
+}
+
+.stat.bad .stat-value {
+  color: var(--danger);
+}
+
+.meter {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--tint);
+  overflow: hidden;
+  margin: var(--s-3) 0 var(--s-2);
+}
+
+.meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+/* A row of the Now card: what is being fetched, how far it has got, and the count. The label and
+   tally columns are fixed so the bars line up under one another instead of stepping in and out
+   with the length of a filename.
+
+   Nothing here animates on purpose. The card is replaced outright every time the run moves, and
+   an animated bar would start over from the left each time — which is what the sweeping bar this
+   replaced looked like it was doing.
+
+   A row, not a .progress: the albums table's "Backed up" cell answers to .albums-progress, and
+   before the two were told apart, laying a grid over that td took the cell out of the table's
+   own layout. */
+.progress-row {
+  display: grid;
+  grid-template-columns: minmax(0, 11rem) 1fr minmax(0, 6rem);
+  align-items: center;
+  gap: var(--s-3);
+  margin: var(--s-2) 0;
+}
+
+.progress-row .meter {
+  margin: 0;
+}
+
+.progress-what {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-tally {
+  margin: 0;
+  text-align: right;
+  font-size: var(--t-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* The files sit under the album they came from, and quieter than it: the album line is the one
+   that says where the run has got to, the file lines only say it has not stalled. */
+.progress-row.progress-file {
+  padding-left: var(--s-4);
+}
+
+.progress-row.progress-file .progress-what {
+  font-size: var(--t-small);
+  color: var(--muted);
+}
+
+.progress-row.progress-file .meter {
+  height: 0.35rem;
+}
+
+/* ---------- badges, outcomes, state ---------- */
+
+.badge {
+  display: inline-block;
+  font-size: var(--t-caption);
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  margin-left: var(--s-1);
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.badge.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.badge.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.badge.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+/* A badge that leads somewhere keeps the badge's colour rather than the link's: it is a count of
+   things needing attention that happens to be clickable, not a link that happens to be round. */
+.badge a {
+  color: inherit;
+}
+
+.outcome {
+  font-weight: 600;
+}
+
+.outcome.ok { color: var(--ok); }
+.outcome.partial, .outcome.drift { color: var(--warn); }
+.outcome.error, .outcome.auth_required { color: var(--danger); }
+/* Being told to stop is not a fault, so it reads as neither. */
+.outcome.interrupted { color: var(--muted); }
+
+.error { color: var(--danger); }
+
+.state {
+  font-weight: 600;
+}
+
+.state.ok::before { content: "● "; color: var(--ok); }
+.state.bad::before { content: "● "; color: var(--danger); }
+
+/* ---------- tables ---------- */
+
+table.albums,
+table.runs {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.albums th,
+table.albums td,
+table.runs th,
+table.runs td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+table.runs td {
+  font-size: var(--t-small);
+}
+
+table.albums tr.albums-followed td {
+  background: var(--tint);
+}
+
+/* A row that saved itself in place is the only sign the change took: nothing navigates, and a
+   banner per change on a list of two hundred would be worse than none. The row says so, and
+   then stops saying it. */
+table.albums tr.albums-saved td {
+  animation: saved 1.2s ease-out;
+}
+
+@keyframes saved {
+  from { background: color-mix(in srgb, var(--ok) 30%, transparent); }
+}
+
+/* The star, and the header that filters by it. A starred album leads the table under every
+   sort, so the mark has to be readable at a glance down a column of 181 rows — which is what
+   the filled glyph and the one warm colour on the page are for. */
+table.albums th.albums-star,
+table.albums td.albums-star {
+  width: 1.5rem;
+  padding-right: 0;
+}
+
+.albums-star form {
+  margin: 0;
+}
+
+.albums-star button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: var(--t-h2);
+  line-height: 1.2;
+}
+
+.albums-star button:hover,
+.albums-star button[aria-pressed="true"] {
+  background: none;
+  color: var(--warn);
+}
+
+.albums-filters {
+  display: flex;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  align-items: center;
+  margin: var(--s-4) 0;
+}
+
+.albums-search {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+}
+
+.albums-favourites {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  color: inherit;
+  font-size: var(--t-small);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.albums-favourites:hover {
+  background: var(--tint);
+}
+
+/* aria-current is the fact itself — this link is the view you are looking at — so the styling
+   and the screen reader are reading the same attribute rather than agreeing by hand. */
+.albums-favourites[aria-current] {
+  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  font-weight: 600;
+}
+
+/* The cover is the only thing that tells one nameless set of shared photos from the next, so
+   it gets a fixed cell the title cannot push around. */
+table.albums th.albums-cover,
+table.albums td.albums-cover {
+  width: 48px;
+  padding-right: 0;
+}
+
+table.albums td.albums-cover img,
+table.albums td.albums-cover .albums-nocover {
+  display: block;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-s);
+  object-fit: cover;
+  background: var(--tint);
+}
+
+/* An error detail under a run gets its own row, indented under the outcome. */
+table.runs td.runs-detail {
+  padding-top: 0;
+  color: var(--muted);
+}
+
+a.albums-sort {
+  color: inherit;
+  text-decoration: none;
+}
+
+a.albums-sort:hover {
+  text-decoration: underline;
+}
+
+.arrow {
+  opacity: 0.7;
+}
+
+/* Key-value table, e.g. the Google page's diagnostics. */
+table.kv {
+  border-collapse: collapse;
+}
+
+table.kv th,
+table.kv td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--s-1) var(--s-4) var(--s-1) 0;
+  font-size: var(--t-small);
+}
+
+table.kv th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- disclosures ---------- */
+
+.bundles-disclosure {
+  display: inline-block;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+}
+
+.bundles-disclosure:hover {
+  text-decoration: underline;
+}
+
+.bundles > table {
+  margin-top: var(--s-3);
+}
+
+details.diagnostics summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--t-small);
+}
+
+/* ---------- item grid ---------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--s-2);
+  margin: var(--s-4) 0;
+}
+
+.grid-cell {
+  position: relative;
+  margin: 0;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--tint);
+}
+
+.grid-cell label {
+  display: block;
+  font-weight: 400;
+  cursor: inherit;
+}
+
+/* The checkbox is the cell's real control: Tab reaches it, Space toggles it, and with no script
+   at all the surrounding form still posts it. It is hidden visually because the tick overlay is
+   its face — not display:none, which would take it out of the tab order and off the form. */
+.grid-cell input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.grid-cell:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.grid-cell .thumb {
+  display: block;
+  width: 100%;
+  height: 9rem;
+  object-fit: cover;
+  background-color: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+/* Pictures arrive from Google one throttled request at a time, so a cell can sit empty for
+   several seconds. A still grey square there reads as "this photo is broken"; a moving one
+   reads as "this photo is coming". images.js stops it when the picture lands, and the picture,
+   being opaque, covers it either way. */
+.thumb.loading {
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, currentColor 20%, transparent) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* A grid that has not been listed yet shows this instead of nothing, so the wait reads as
+   loading rather than as an empty album. */
+.grid-skeleton .grid-cell {
+  height: 9rem;
+}
+
+.grid-cell figcaption {
+  font-size: var(--t-caption);
+  padding: var(--s-1) var(--s-2);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.grid-picking .grid-cell {
+  cursor: pointer;
+  user-select: none;
+}
+
+.grid-picking .grid-cell:has(:checked) {
+  border-color: var(--ok);
+}
+
+/* The tick only exists while picking: outside picked mode a grid of ticks would suggest a
+   choice the user cannot actually make here. */
+.grid-picking .grid-tick {
+  position: absolute;
+  top: 0.3rem;
+  left: 0.3rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 3px #0009;
+  background: #0006;
+}
+
+.grid-picking .grid-cell:has(:checked) .grid-tick {
+  background: var(--ok);
+}
+
+.grid-picking .grid-cell:has(:checked) .grid-tick::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1.1rem;
+  text-align: center;
+}
+
+.grid-marks {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  display: flex;
+  gap: 0.2rem;
+}
+
+.grid-mark {
+  display: inline-block;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  line-height: 1.1rem;
+  text-align: center;
+  font-size: var(--t-caption);
+  border-radius: 3px;
+  background: #000a;
+  color: #fff;
+}
+
+.grid-mark.done { background: color-mix(in srgb, var(--ok) 85%, #000); }
+.grid-mark.failed { background: color-mix(in srgb, var(--danger) 85%, #000); }
+.grid-mark.gone { background: color-mix(in srgb, var(--danger) 75%, #000); }
+.grid-mark.review { background: color-mix(in srgb, var(--warn) 75%, #000); }
+
+.pager {
+  display: flex;
+  gap: var(--s-4);
+  align-items: center;
+  justify-content: center;
+  margin: var(--s-4) 0;
+  font-size: var(--t-small);
+}
+
+/* ---------- empty states ---------- */
+
+.empty {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  padding: var(--s-6) var(--s-4);
+  margin: var(--s-4) 0;
+  text-align: center;
+}
+
+.empty p {
+  margin: 0 0 var(--s-3);
+  color: var(--muted);
+}
+
+.empty form {
+  margin: 0;
+}
+
+/* ---------- page-specific small pieces ---------- */
+
+.library-form,
+.settings-form p {
+  display: flex;
+  gap: var(--s-2);
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin: var(--s-3) 0 0;
+}
+
+.library-form label,
+.settings-form label {
+  font-weight: 400;
+}
+
+.settings-form label {
+  min-width: 12rem;
+}
+
+.crumbs {
+  margin: var(--s-3) 0 0;
+  font-size: var(--t-small);
+}
+
+iframe.vnc {
+  width: 100%;
+  height: 70vh;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: var(--s-4) 0;
+  box-sizing: border-box;
+}
+
+.login-page main {
+  max-width: 22rem;
+  margin-top: 12vh;
+}
+
+/* ---------- narrow screens ---------- */
+
+@media (max-width: 40rem) {
+  .card-row {
+    grid-template-columns: 1fr;
+  }
+
+  .stats {
+    gap: var(--s-4);
+  }
+
+  .stat {
+    min-width: 40%;
+  }
+
+  /* A phone has no room for a label column wide enough to hold a filename, so the name goes on
+     its own line above its bar. */
+  .progress-row {
+    grid-template-columns: 1fr minmax(0, 6rem);
+  }
+
+  .progress-what {
+    grid-column: 1 / -1;
+  }
+
+  /* Created and Items are the columns a phone can live without; the title, the progress and the
+     mode selector are the page's whole point. */
+  table.albums .albums-created,
+  table.albums .albums-items {
+    display: none;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  }
+
+  .grid-cell .thumb,
+  .grid-skeleton .grid-cell {
+    height: 6.5rem;
+  }
+
+  iframe.vnc {
+    height: 60vh;
+  }
+}
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .thumb.loading,
+  table.albums tr.albums-saved td {
+    animation: none;
+  }
+}
+
+/* ---------- viewer ---------- */
+
+/* The expand button fades in on hover so it is not clutter on a page of them, and is always
+   there for the keyboard, which cannot click a photo. On a picking grid it is the only way in:
+   a click on the cell there already means "back this one up". */
+.grid-expand {
+  position: absolute;
+  top: var(--s-1);
+  right: var(--s-1);
+  padding: 0 var(--s-2);
+  font-size: var(--t-small);
+  line-height: 1.6;
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  opacity: 0;
+}
+
+.grid-cell:hover .grid-expand,
+.grid-cell .grid-expand:focus-visible {
+  opacity: 1;
+}
+
+dialog.viewer {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: light-dark(#f4f4f2, #e8e8e6);
+}
+
+dialog.viewer::backdrop {
+  background: rgb(0 0 0 / 0.88);
+}
+
+/* minmax(0, 1fr), not 1fr: a 1fr row will not shrink below the tallest thing in it, so a
+   4000-pixel photograph pushed the row past the bottom of the screen and took the caption with
+   it. This row is allowed to be smaller than its contents, and the stage below clips them. */
+dialog.viewer figure {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: var(--s-2);
+  box-sizing: border-box;
+  height: 100%;
+  margin: 0;
+  padding: var(--s-4);
+  place-items: center;
+}
+
+/* The stage is a fixed box the media fits inside, rather than a box the media sets the size of:
+   letting a 6000-pixel photograph size its own container made the page scroll and the caption
+   land somewhere below the fold.
+   Flex, not grid: max-height: 100% on a grid item in an auto-sized row is a percentage against a
+   height that depends on the item itself, so browsers drop it and size the photograph by width
+   alone. Against a flex container of definite height it resolves, and the photograph fits. */
+.viewer-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+dialog.viewer img,
+dialog.viewer video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Zoom is viewer.js writing a transform on the photograph; the stage clips what that pushes over
+   the edge, and the cursor is the only thing saying the gesture is there at all. */
+.viewer-stage img {
+  cursor: zoom-in;
+}
+
+.viewer-near img {
+  cursor: grab;
+}
+
+.viewer-near:active img {
+  cursor: grabbing;
+}
+
+dialog.viewer figcaption {
+  font-size: var(--t-small);
+  text-align: center;
+}
+
+.viewer-counter {
+  margin: 0;
+  color: inherit;
+  opacity: 0.7;
+}
+
+dialog.viewer button {
+  position: absolute;
+  z-index: 1;
+  border: 0;
+  border-radius: var(--radius);
+  background: rgb(255 255 255 / 0.12);
+  color: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: var(--s-2) var(--s-3);
+}
+
+dialog.viewer button:hover {
+  background: rgb(255 255 255 / 0.24);
+}
+
+.viewer-close {
+  top: var(--s-3);
+  right: var(--s-3);
+}
+
+.viewer-step {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.viewer-back { left: var(--s-3); }
+.viewer-on { right: var(--s-3); }

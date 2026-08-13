@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activity · gpb</title>
+<link rel="stylesheet" href="preview.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <nav aria-label="Main">
+    <a class="brand" href="index.html">gpb</a>
+    <a href="overview.html">Overview</a>
+    <a href="albums.html">Albums</a>
+    <a href="runs.html" aria-current="page">Activity</a>
+    <a href="review.html" aria-label="Review, 8 waiting">Review <span class="count" aria-hidden="true">8</span></a>
+    <a href="google.html">Google</a>
+    <a href="settings.html">Settings</a>
+    <form><button type="button" class="btn-link">Log out</button></form>
+  </nav>
+</header>
+<main id="main">
+<h1>Activity</h1>
+<section class="card">
+  <h2>Now</h2>
+  <p>Backing up — listing “Ski trip Zakopane 2025”</p>
+  <div class="stats">
+    <p class="stat"><span class="value">1,204</span> <span class="label">listed</span></p>
+    <p class="stat"><span class="value">350</span> <span class="label">downloaded</span></p>
+    <p class="stat"><span class="value">2</span> <span class="label">failed</span></p>
+  </div>
+  <div class="meter indeterminate" role="progressbar" aria-label="Backup run in progress"><span></span></div>
+  <p class="small muted">Started 14:02 · this block updates itself every few seconds.</p>
+</section>
+
+<h2>History</h2>
+<table class="runs">
+  <thead>
+    <tr><th>Started</th><th>Outcome</th><th class="num">Listed</th>
+        <th class="num">Downloaded</th><th class="num">Failed</th><th class="num">Size</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="date">today 03:41</td>
+      <td><span class="outcome ok">ok</span></td>
+      <td class="num">4,211</td><td class="num">122</td><td class="num">0</td>
+      <td class="num">1.2 GB</td>
+    </tr>
+    <tr>
+      <td class="date">yesterday 03:12</td>
+      <td><span class="outcome partial">partial</span></td>
+      <td class="num">4,198</td><td class="num">87</td><td class="num">3</td>
+      <td class="num">803.1 MB</td>
+    </tr>
+    <tr><td></td><td colspan="5" class="detail">3 downloads failed after retries: fetching
+      FAKE_2214.MOV: unexpected status 429 from an invented endpoint</td></tr>
+    <tr>
+      <td class="date">2026-08-07 03:26</td>
+      <td><span class="outcome ok">ok</span></td>
+      <td class="num">4,190</td><td class="num">54</td><td class="num">0</td>
+      <td class="num">402.9 MB</td>
+    </tr>
+    <tr>
+      <td class="date">2026-08-06 03:55</td>
+      <td><span class="outcome auth_required">auth_required</span></td>
+      <td class="num">0</td><td class="num">0</td><td class="num">0</td>
+      <td class="num">—</td>
+    </tr>
+    <tr><td></td><td colspan="5" class="detail">Google asked for an interactive login; the run
+      stopped before listing anything. Signed back in 2026-08-06 08:14.</td></tr>
+    <tr>
+      <td class="date">2026-08-05 03:31</td>
+      <td><span class="badge warn">interrupted</span></td>
+      <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+      <td class="num">—</td>
+    </tr>
+    <tr><td></td><td colspan="5" class="detail">Started and never finished: the daemon stopped
+      before it could say how it went. Nothing downloaded was lost; the next run picked up
+      where it left off.</td></tr>
+    <tr>
+      <td class="date">2026-08-04 03:44</td>
+      <td><span class="outcome drift">drift</span></td>
+      <td class="num">312</td><td class="num">0</td><td class="num">0</td>
+      <td class="num">—</td>
+    </tr>
+    <tr><td></td><td colspan="5" class="detail">Google changed the album listing's shape; the
+      run stopped rather than guess. A payload sample is saved for debugging.</td></tr>
+    <tr>
+      <td class="date">2026-08-03 03:18</td>
+      <td><span class="outcome ok">ok</span></td>
+      <td class="num">4,161</td><td class="num">203</td><td class="num">1</td>
+      <td class="num">2.4 GB</td>
+    </tr>
+    <tr>
+      <td class="date">2026-08-02 03:37</td>
+      <td><span class="outcome ok">ok</span></td>
+      <td class="num">4,140</td><td class="num">96</td><td class="num">0</td>
+      <td class="num">870.0 MB</td>
+    </tr>
+  </tbody>
+</table>
+</main>
+<p class="preview-note"><a href="index.html">← All preview screens</a> · every name, number and photo on this page is invented sample data.</p>
+<script src="preview.js" defer></script>
+</body>
+</html>

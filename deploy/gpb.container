@@ -1,0 +1,35 @@
+[Unit]
+Description=Google Photos backup (gpb)
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=docker.io/sodre90/gpb:0.1.1
+AutoUpdate=registry
+# The data volume holds Google Chrome as well as the profile and the database — the image ships
+# without it and the container fetches it here on the first start, so this wants ~1 GB free.
+Volume=%h/gpb/data:/data:Z
+# Point this at the media disk before the first run: a library of 122,331 items outgrows a
+# system disk, and filling that one takes the whole box down with it.
+Volume=%h/gpb/photos:/photos:Z
+# 8090 rather than 8080 because 8080 is the port everything else on a home server wants too.
+# The container always listens on 8080 inside. Prefix a host address — 192.168.x.y:8090:8080 —
+# to keep the listener off every other interface.
+PublishPort=8090:8080
+ShmSize=1g
+UserNS=keep-id
+# Your own zone, not UTC unless you mean it: the daily backup time is read in it, and so is the
+# date a photograph is filed under in the pool.
+Environment=TZ=UTC
+HealthCmd=gpb status --healthcheck
+HealthInterval=5m
+HealthStartPeriod=2m
+
+[Service]
+# always, not on-failure: the Restart button on the settings page stops the daemon cleanly and
+# leaves starting it again to systemd, and on-failure would take a clean exit at its word.
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,16 @@
+gpb — Google Photos backup
+Copyright 2026 perdos
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+This project is not affiliated with, endorsed by, or sponsored by Google LLC.
+"Google", "Google Photos" and "Google Chrome" are trademarks of Google LLC and
+are used here only to say what this software talks to.
+
+gpb drives Google Chrome, which is not free software and carries its own terms.
+The published image therefore contains no part of it: the container downloads
+Chrome from Google's own server into its data volume the first time it starts,
+so what is redistributed here is this project, and Chrome reaches you from
+Google under the terms you accept there — as it would installing it on a laptop.
+Chromium would avoid the question and does not work; deploy/README.md records
+the measurement.

@@ -1,0 +1,13 @@
+{{define "content"}}
+<section class="card">
+  <p>gpb is stopping, and whatever runs it will start it again. Give it about fifteen seconds.</p>
+  {{with .Data}}
+    <p><a href="{{.}}">{{.}}</a></p>
+    <p class="small muted">That is the address in the settings, which is where it will answer —
+       not necessarily the one you are reading this on. If encryption was just turned on, your
+       browser will have its say about the certificate the first time.</p>
+  {{else}}
+    <p class="small muted">No address is set in the settings, so come back the way you arrived.</p>
+  {{end}}
+</section>
+{{end}}

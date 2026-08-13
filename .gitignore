@@ -1,0 +1,26 @@
+/gpb
+
+# Live Google session captures: cookies, tokens and signed media URLs recorded
+# from a real account. spike/.gitignore also excludes these; the rule is repeated
+# here so moving or losing that file cannot make them committable.
+captures/
+
+# Media pulled down while probing, wherever it lands.
+*.jpg
+*.jpeg
+*.heic
+*.mp4
+*.mov
+
+# Issue tracker and agent tooling. The issues live in a Dolt database under
+# .beads/ and stay on the machine that works on this; the rest is hook wiring for
+# whatever assistant happens to be driving. None of it is part of what runs, and
+# none of it is any use to someone who has cloned this.
+.beads/
+.agents/
+.claude/
+.codex/
+.dolt/
+.beads-credential-key
+
+*.db

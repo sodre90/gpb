@@ -1,0 +1,51 @@
+# The published image carries no Google Chrome — it is not ours to hand on — so the container
+# fetches it from Google into the data volume the first time it starts, and says so in the log.
+# Google Chrome rather than Chromium is load-bearing and not a preference; deploy/README.md says
+# what happens with the other one.
+#
+#   docker compose up -d
+#   docker compose exec gpb gpb passwd
+#
+# The paths, the port and the zone come from the environment, so `git pull` never walks over
+# what you set. Put them in a .env beside this file:
+#
+#   GPB_DATA=/srv/gpb/data
+#   GPB_PHOTOS=/mnt/media/gpb/photos
+#   GPB_PORT=8090
+#   TZ=Europe/Lisbon
+
+services:
+  gpb:
+    image: sodre90/gpb:0.1.1
+    # Would rather build it yourself? Uncomment, and `docker compose up -d --build`.
+    # build: .
+    container_name: gpb
+    # Not on-failure: the Restart button on the settings page stops the daemon cleanly, and a
+    # policy that only answers failures would take that clean exit at its word and leave it down.
+    restart: unless-stopped
+    environment:
+      # The daily backup time is read in this zone, and so is the date a photograph is filed
+      # under in the pool.
+      TZ: ${TZ:-UTC}
+      # Podman sets this itself; Docker tells the process nothing about being supervised. It is
+      # how the settings page knows a Restart would be followed by a start, and without it the
+      # button hides rather than stranding you with a daemon nothing brings back.
+      container: docker
+    ports:
+      # 8090 outside because 8080 is the port everything else on a home server wants too; inside,
+      # the daemon always listens on 8080. Put an address in front — "192.168.1.10:8090:8080" —
+      # to keep the listener off every other interface.
+      - "${GPB_PORT:-8090}:8080"
+    volumes:
+      # This one holds Chrome itself and Chrome's profile, which is a whole Google account and not
+      # a Photos-scoped token. Keep it private — mode 0700 — and owned by uid 1000, which is who
+      # the container is. Leave it ~1 GB: the browser lands here on the first start.
+      - ${GPB_DATA:-./data}:/data
+      # The pool grows without limit and belongs wherever there is room. Same owner.
+      - ${GPB_PHOTOS:-./photos}:/photos
+    # Chrome shares memory between its processes and gives up on the default 64 MB.
+    shm_size: 1gb
+    healthcheck:
+      test: ["CMD", "gpb", "status", "--healthcheck"]
+      interval: 5m
+      start_period: 2m
