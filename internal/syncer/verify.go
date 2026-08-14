@@ -109,9 +109,6 @@ func Verify(ctx context.Context, db *store.Store, repair bool) (Verification, er
 		}
 
 		report.Checked++
-		if report.Checked%progressInterval == 0 {
-			log.Printf("verify: %d of %d files read, %d intact", report.Checked, len(items), report.Intact)
-		}
 
 		digest, err := hashFile(item.LocalPath)
 		switch {
@@ -126,6 +123,10 @@ func Verify(ctx context.Context, db *store.Store, repair bool) (Verification, er
 				fmt.Sprintf("recorded %s, found %s", shortHash(item.SHA256), shortHash(digest)))
 		default:
 			report.Intact++
+		}
+
+		if report.Checked%progressInterval == 0 {
+			log.Printf("verify: %d of %d files read, %d intact", report.Checked, len(items), report.Intact)
 		}
 	}
 
