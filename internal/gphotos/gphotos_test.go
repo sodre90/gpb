@@ -469,9 +469,11 @@ func TestDecodersRejectDriftWithAPath(t *testing.T) {
 	}
 }
 
-// A missing items array is reported the same way whether the album is empty, gone, or genuinely
-// drifted, so the position on its own does not say which happened. The payload skeleton is what
-// separates them, and it is the only thing in the error a maintainer can act on.
+// A missing items array is reported the same way whether the album is gone or genuinely drifted,
+// so the position on its own does not say which happened. The payload skeleton is what separates
+// them, and it is the only thing in the error a maintainer can act on. Every case here lacks the
+// album record an empty album's page carries, which is what keeps them drift rather than the
+// empty page TestAnEmptyAlbumIsAPageWithNoItemsRatherThanDrift expects.
 func TestDriftErrorsCarryThePayloadSkeleton(t *testing.T) {
 	cases := map[string]struct {
 		payload any
@@ -496,6 +498,33 @@ func TestDriftErrorsCarryThePayloadSkeleton(t *testing.T) {
 				t.Errorf("the drift error does not describe the payload as %q: %v", test.want, err)
 			}
 		})
+	}
+}
+
+// The shape here was measured from a real empty album on 2026-09-10 — the skeleton
+// [null,null,str,[…40],null,num] that 0.1.3's drift report printed — rather than recorded into a
+// fixture, so the values are placeholders and the arity is the part that is real.
+func TestAnEmptyAlbumIsAPageWithNoItemsRatherThanDrift(t *testing.T) {
+	albumRecord := []any{"AF1QipEmptyAlbum", "2025. Karácsonyi kártyaparty"}
+	page, err := decodeItemPage([]any{nil, nil, "cursor", albumRecord, nil, 0.0})
+	if err != nil {
+		t.Fatalf("an empty album did not decode: %v", err)
+	}
+	if len(page.Items) != 0 {
+		t.Errorf("got %d items from an empty album, want none", len(page.Items))
+	}
+	if page.AlbumTitle != "2025. Karácsonyi kártyaparty" {
+		t.Errorf("the empty album lost its title: %q", page.AlbumTitle)
+	}
+}
+
+// The album record is the whole of the reason an empty page is read as empty. Without it, a page
+// that has lost its items has to stay drift: read as an empty album it would tell the syncer that
+// every item the album holds has been taken out of it.
+func TestAPageWithNeitherItemsNorAnAlbumRecordIsStillDrift(t *testing.T) {
+	_, err := decodeItemPage([]any{nil, nil, "cursor", nil, nil, 0.0})
+	if !errors.Is(err, ErrProtocolDrift) {
+		t.Fatalf("got %v, want an ErrProtocolDrift", err)
 	}
 }
 

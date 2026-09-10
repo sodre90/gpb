@@ -63,7 +63,7 @@ func (c *Client) AlbumItems(ctx context.Context, albumID, pageToken string) (Ite
 func decodeItemPage(payload any) (ItemPage, error) {
 	root := rootOf(payload, albumItemsRPC)
 
-	items, err := decodeMediaItems(root.at(itemPageEntriesIndex))
+	items, err := decodeAlbumEntries(root)
 	if err != nil {
 		return ItemPage{}, err
 	}
@@ -75,6 +75,24 @@ func decodeItemPage(payload any) (ItemPage, error) {
 	page.AlbumID, _ = root.at(itemPageAlbumMetaIndex).at(0).text()
 	page.AlbumTitle, _ = root.at(itemPageAlbumMetaIndex).at(1).text()
 	return page, nil
+}
+
+// decodeAlbumEntries reads an album page's entries, allowing for the one album that has none.
+// An empty album answers with the same six-slot page as any other — cursor, album record, the
+// lot — and simply nothing where the entries go, rather than an empty array. Measured
+// 2026-09-10 against a real empty album: [null,null,str,[…40],null,num] beside a six-item
+// album's [null,[…6],str,[…43],null,num].
+//
+// The album record is what says the page is well formed, and requiring it is what keeps this
+// from being a hole in the drift check: read on its own, a missing entries array would say
+// "this album is empty" just as loudly when the entries have moved to another slot, and the
+// caller would write off everything the album holds.
+func decodeAlbumEntries(root tree) ([]MediaItem, error) {
+	entries := root.at(itemPageEntriesIndex)
+	if !entries.present() && root.at(itemPageAlbumMetaIndex).present() {
+		return nil, nil
+	}
+	return decodeMediaItems(entries)
 }
 
 // decodeMediaItems reads the array of entries an album page and a timeline page both carry,

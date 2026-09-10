@@ -363,6 +363,26 @@ alone underdescribes the failure: "found nothing at `snAcKc[1]`" reads identical
 Google sent `null`, `[]`, `[null]`, or an array whose second slot has moved, and those are
 four different bugs with four different fixes.
 
+**An empty album is not drift**, though it was indistinguishable from it until a real one turned
+up. Google answers an album holding nothing with the same six-slot page as any other — cursor,
+album record, the lot — and simply nothing where the entries array goes, rather than an empty
+array. Measured 2026-09-10 against a real one: `[null,null,str,[…40],null,num]`, beside a
+six-item album's `[null,[…6],str,[…43],null,num]`. The decoder reads a missing entries array as
+no items *when the album record beside it is present*, and as drift when it is not. That
+condition is the whole of the safety: on its own, a missing entries array says "this album is
+empty" just as convincingly when the entries have moved to another slot, and a run would write
+off an album's entire contents on the strength of it.
+
+So a walk that listed nothing asks for a second opinion before anything is written off.
+`reconcileLibrary` has had a rule of this shape from the start, for a different reason: an
+account under backup is never empty, so a timeline that lists nothing is a failure wearing a
+success's clothes. An album may perfectly well hold nothing, so the question there is not
+whether the walk listed anything but whether it agrees with what Google said it would. The
+album listing at the top of the run carries Google's own count. Nothing listed against a count
+of nothing is an empty album, and reconciling drops the links it no longer has; nothing listed
+against a count of twenty-four is a well-formed page telling a lie, and since every album with
+contents would hit that at once, the run stops there rather than stepping over it.
+
 **What a run does about drift depends on how much of it there is.** A single album whose
 contents will not decode is stepped over: the run records which album it was, walks the rest,
 and finishes `partial` with the skipped albums named in its detail line. Stepping over is

@@ -461,6 +461,8 @@ func (s *Syncer) walkAlbums(ctx context.Context, followed []store.Album, refresh
 		case err == nil:
 			walk.walked++
 			log.Printf("syncer: an album walk recorded %d items in %s", count, since(walkStartedAt))
+		case errors.Is(err, errAlbumCountContradicted):
+			return walk, err
 		case errors.Is(err, gphotos.ErrProtocolDrift):
 			walk.skipped = append(walk.skipped, s.describeAlbum(album.ID))
 			if walk.drifted == nil {
@@ -675,6 +677,10 @@ func (s *Syncer) listAlbum(ctx context.Context, albumID string) (int, error) {
 		}
 	}
 
+	if err := s.checkTheWalkAgreesWithGoogle(albumID, listed); err != nil {
+		return listed, err
+	}
+
 	if err := s.flagArrivals(albumID, arrived); err != nil {
 		return listed, err
 	}
@@ -697,6 +703,33 @@ func (s *Syncer) listAlbum(ctx context.Context, albumID string) (int, error) {
 // before this run started, an empty album was seen just now holding nothing, and real protocol
 // drift was seen just now holding something. The title is here because it is what the person
 // reading the log calls the album, and the id because it is what `gpb unfollow` takes.
+// errAlbumCountContradicted is drift arriving by a route no decoder can refuse: the page parses
+// cleanly and simply holds no entries, for an album Google's own listing says is not empty. The
+// likeliest cause is the entries moving to another slot, which every album with contents would
+// hit at once — so it stops the walk rather than being stepped over like one strange album.
+var errAlbumCountContradicted = fmt.Errorf(
+	"%w: an album page carried no items at all for an album Google says is not empty",
+	gphotos.ErrProtocolDrift)
+
+// checkTheWalkAgreesWithGoogle refuses to let a walk that listed nothing write everything off.
+// reconcileLibrary has the same rule for a different reason: an account under backup is never
+// empty, so it can treat an empty listing as a failure outright. An album may perfectly well
+// hold nothing, so the rule here is not "a walk that listed nothing is wrong" but "Google told
+// us in this run's album listing whether this album is empty, and the walk has to agree with it".
+func (s *Syncer) checkTheWalkAgreesWithGoogle(albumID string, listed int) error {
+	if listed > 0 {
+		return nil
+	}
+	album, err := s.store.Album(albumID)
+	if err != nil {
+		return err
+	}
+	if album.ItemCount == 0 {
+		return nil
+	}
+	return fmt.Errorf("%w — %s", errAlbumCountContradicted, describeAlbum(album))
+}
+
 func (s *Syncer) describeAlbum(albumID string) string {
 	album, err := s.store.Album(albumID)
 	if err != nil {

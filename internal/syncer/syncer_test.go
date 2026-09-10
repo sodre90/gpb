@@ -1493,7 +1493,7 @@ func followAlbum(t *testing.T, h *harness, albumID, title string, keys ...string
 		})
 		h.source.bodies[key] = []byte(key)
 	}
-	h.source.albums = append(h.source.albums, gphotos.Album{ID: albumID, Title: title})
+	h.source.albums = append(h.source.albums, gphotos.Album{ID: albumID, Title: title, ItemCount: len(keys)})
 
 	if err := h.store.UpsertAlbum(store.Album{ID: albumID, Title: title}, time.Now()); err != nil {
 		t.Fatalf("seeding %s: %v", albumID, err)
@@ -1663,6 +1663,57 @@ func TestAnAlbumTooBrokenToDescribeIsStillNamed(t *testing.T) {
 	described := h.syncer.describeAlbum("album-nobody-recorded")
 	if !strings.Contains(described, "album-nobody-recorded") {
 		t.Errorf("an undescribable album reads as %q, want its id", described)
+	}
+}
+
+// An album with nothing in it is an ordinary album, not a failure. 0.1.3 reported one as drift
+// on every run and stepped over it, which left a permanent `partial` on a library that was
+// entirely backed up.
+func TestAnEmptyAlbumIsWalkedLikeAnyOther(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one"})
+	followAlbum(t, h, "album-empty", "2025. Karácsonyi kártyaparty")
+
+	report, err := h.syncer.Run(t.Context())
+	if err != nil {
+		t.Fatalf("a run over an empty album: %v", err)
+	}
+	if len(report.SkippedAlbums) > 0 {
+		t.Errorf("an empty album was reported as unreadable: %v", report.SkippedAlbums)
+	}
+	if report.Outcome != store.OutcomeOK {
+		t.Errorf("the run finished %q, want ok", report.Outcome)
+	}
+}
+
+// The price of reading a page with no entries as an empty album is that entries moving to another
+// slot would read the same way — and taken at face value it would empty every album on disk. The
+// count Google gave in this run's own listing is the second opinion that stops it, and because
+// every album with contents would hit this at once it ends the run rather than being stepped over.
+func TestAnAlbumThatListsNothingGoogleSaysIsFullStopsTheRun(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one", "key-2": "two"})
+
+	if _, err := h.syncer.Run(t.Context()); err != nil {
+		t.Fatalf("the first run: %v", err)
+	}
+	h.source.items["album-1"] = nil
+
+	report, err := h.syncer.Run(t.Context())
+	if !errors.Is(err, errAlbumCountContradicted) {
+		t.Fatalf("a walk that listed none of two items ended with %v, want the count contradicted", err)
+	}
+	if !errors.Is(err, gphotos.ErrProtocolDrift) {
+		t.Errorf("the contradiction is not reported as drift: %v", err)
+	}
+	if report.Outcome != store.OutcomeDrift {
+		t.Errorf("the run finished %q, want drift", report.Outcome)
+	}
+
+	members, err := h.store.MembersOf("album-1")
+	if err != nil {
+		t.Fatalf("reading the album: %v", err)
+	}
+	if !members["key-1"] || !members["key-2"] {
+		t.Errorf("the album was emptied on a listing that returned nothing: %v", members)
 	}
 }
 
