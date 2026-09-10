@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -36,22 +37,27 @@ type fakeSource struct {
 	beforeAlbumItems func()
 	onDownload       func()
 	albumItemsErr    error
+	// albumItemsErrs fails named albums while the rest still list, which is the shape of every
+	// question about skipping: one album Google answers strangely among many it answers well.
+	albumItemsErrs map[string]error
 
 	mu             sync.Mutex
 	failures       map[string]int
 	ignoreRange    map[string]bool
 	downloadCalls  int
 	timelineCalls  int
+	albumsListed   []string
 	albumsAskedFor []string
 	rangeRequested []int64
 }
 
 func newFakeSource() *fakeSource {
 	return &fakeSource{
-		items:       map[string][]gphotos.MediaItem{},
-		bodies:      map[string][]byte{},
-		failures:    map[string]int{},
-		ignoreRange: map[string]bool{},
+		items:          map[string][]gphotos.MediaItem{},
+		bodies:         map[string][]byte{},
+		failures:       map[string]int{},
+		ignoreRange:    map[string]bool{},
+		albumItemsErrs: map[string]error{},
 	}
 }
 
@@ -69,8 +75,15 @@ func (f *fakeSource) AlbumItems(_ context.Context, albumID, _ string) (gphotos.I
 	if f.beforeAlbumItems != nil {
 		f.beforeAlbumItems()
 	}
+	f.mu.Lock()
+	f.albumsListed = append(f.albumsListed, albumID)
+	f.mu.Unlock()
+
 	if f.albumItemsErr != nil {
 		return gphotos.ItemPage{}, f.albumItemsErr
+	}
+	if err := f.albumItemsErrs[albumID]; err != nil {
+		return gphotos.ItemPage{}, err
 	}
 	return gphotos.ItemPage{AlbumID: albumID, Items: f.items[albumID]}, nil
 }
@@ -168,6 +181,15 @@ func (f *fakeSource) albumsRequested() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string(nil), f.albumsAskedFor...)
+}
+
+// albumsWalked names the albums a run asked for the contents of, in order. It answers the one
+// question a test cannot ask any other way: whether the walk carried on past a bad album or
+// stopped dead at it.
+func (f *fakeSource) albumsWalked() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.albumsListed...)
 }
 
 func (f *fakeSource) timelinePagesServed() int {
@@ -1284,6 +1306,363 @@ func TestAFailedListingStillKeepsWhatTheWorkersFetched(t *testing.T) {
 	}
 	if report.Outcome != store.OutcomeError {
 		t.Errorf("the run recorded outcome %q, want error", report.Outcome)
+	}
+}
+
+// stopListing takes an album out of what Google reports without unfollowing it, which is the
+// state a deleted album or a withdrawn share leaves behind: the store still has the row and the
+// user's instruction to back it up, and no listing mentions it again.
+func stopListing(h *harness, albumID string) {
+	kept := make([]gphotos.Album, 0, len(h.source.albums))
+	for _, album := range h.source.albums {
+		if album.ID != albumID {
+			kept = append(kept, album)
+		}
+	}
+	h.source.albums = kept
+}
+
+// Following outlives listing: nothing clears sync_mode when an album is deleted or a share is
+// withdrawn, so the id was asked for on every run forever and answered with something that is
+// not a listing. The refresh at the top of the run already knows better.
+func TestAnAlbumGoogleNoLongerListsIsNotWalked(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one"})
+	followAlbum(t, h, "album-2", "Zzz Last", "key-2")
+	stopListing(h, "album-1")
+
+	report, err := h.syncer.Run(t.Context())
+	if err != nil {
+		t.Fatalf("running the sync: %v", err)
+	}
+	if slices.Contains(h.source.albumsWalked(), "album-1") {
+		t.Error("an album Google no longer lists was asked for anyway")
+	}
+	if len(report.UnlistedAlbums) != 1 || !strings.Contains(report.UnlistedAlbums[0], "album-1") {
+		t.Errorf("the run reports %v unlisted, want the album Google dropped", report.UnlistedAlbums)
+	}
+	if report.Outcome != store.OutcomePartial {
+		t.Errorf("a run that left an album unwalked recorded outcome %q, want partial", report.Outcome)
+	}
+}
+
+// Not walking an album must not be mistaken for walking it and finding it empty. The links are
+// the album view and the user's selections; writing them off because Google stopped mentioning
+// the album would destroy the record of what was in it.
+func TestAnAlbumGoogleNoLongerListsKeepsItsContents(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one"})
+	followAlbum(t, h, "album-2", "Zzz Last", "key-2")
+
+	if _, err := h.syncer.Run(t.Context()); err != nil {
+		t.Fatalf("the first run: %v", err)
+	}
+	stopListing(h, "album-1")
+	if _, err := h.syncer.Run(t.Context()); err != nil {
+		t.Fatalf("the second run: %v", err)
+	}
+
+	members, err := h.store.MembersOf("album-1")
+	if err != nil {
+		t.Fatalf("reading the album: %v", err)
+	}
+	if !members["key-1"] {
+		t.Error("an album Google stopped listing lost the items it held")
+	}
+}
+
+// One album can genuinely go. Every album going at once between two nightly runs is not four
+// hundred deletions, it is a listing this run should not have believed — and believed, it would
+// leave the user with a backup that had quietly stopped walking anything.
+func TestARunWhereGoogleListedNoFollowedAlbumFails(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one"})
+	followAlbum(t, h, "album-2", "Zzz Last", "key-2")
+	h.source.albums = nil
+
+	report, err := h.syncer.Run(t.Context())
+	if err == nil {
+		t.Fatal("a run that was offered none of its albums reported success")
+	}
+	if report.Outcome == store.OutcomeOK || report.Outcome == store.OutcomePartial {
+		t.Errorf("a run that was offered none of its albums recorded outcome %q", report.Outcome)
+	}
+}
+
+// An album Google has dropped stays unwalked on every run from now on, so the run page has to say
+// what to do about it rather than showing an unexplained partial for ever.
+func TestTheRunPageSaysToUnfollowAnAlbumGoogleDropped(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one"})
+	followAlbum(t, h, "album-2", "Zzz Last", "key-2")
+	stopListing(h, "album-1")
+
+	if _, err := h.syncer.Run(t.Context()); err != nil {
+		t.Fatalf("running the sync: %v", err)
+	}
+
+	runs, err := h.store.RecentRuns(1)
+	if err != nil || len(runs) == 0 {
+		t.Fatalf("reading the run: %v", err)
+	}
+	for _, want := range []string{"no longer listed by Google", "everything it held is kept",
+		"unfollowing it", "album-1"} {
+		if !strings.Contains(runs[0].Error, want) {
+			t.Errorf("the recorded run does not mention %q: %q", want, runs[0].Error)
+		}
+	}
+}
+
+// The two rules that keep stepping over albums honest, stated on their own. Drift is judged by
+// whether anything decoded at all; an album Google stopped naming is judged by whether Google
+// named anything at all. Neither is a count or a threshold, because a count cannot tell four
+// hundred deletions from one broken listing — both look like "all of them".
+func TestAWalkFailsOnlyWhenTheWholeListingIsInDoubt(t *testing.T) {
+	drift := fmt.Errorf("%w: nothing decoded", gphotos.ErrProtocolDrift)
+	cases := map[string]struct {
+		walk     albumWalk
+		wantFail bool
+	}{
+		"everything decoded":      {walk: albumWalk{walked: 3}},
+		"one album of many":       {walk: albumWalk{walked: 2, skipped: []string{"a"}, drifted: drift}},
+		"many albums among a few": {walk: albumWalk{walked: 1, skipped: make([]string, 400), drifted: drift}},
+		"the only album there was": {
+			walk: albumWalk{skipped: []string{"a"}, drifted: drift}, wantFail: true,
+		},
+		"every album drifted": {
+			walk: albumWalk{skipped: []string{"a", "b"}, drifted: drift}, wantFail: true,
+		},
+		"one album gone from a listing that named others": {
+			walk: albumWalk{walked: 2, unlisted: []string{"a"}},
+		},
+		"the only album gone from a listing that named others": {
+			walk: albumWalk{unlisted: []string{"a"}},
+		},
+		"every album gone from a listing that named nothing": {
+			walk: albumWalk{unlisted: []string{"a", "b"}, listingWasEmpty: true}, wantFail: true,
+		},
+		"nothing followed at all": {walk: albumWalk{listingWasEmpty: true}},
+	}
+
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := test.walk.verdict()
+			if failed := err != nil; failed != test.wantFail {
+				t.Errorf("a walk of %d walked, %d skipped and %d unlisted returned %v, want a failure: %t",
+					test.walk.walked, len(test.walk.skipped), len(test.walk.unlisted), err, test.wantFail)
+			}
+		})
+	}
+}
+
+// The case that decides the rule: someone who follows one album and deletes it in Google Photos
+// must not lose their library backup over it. Google still lists their other albums, so the one
+// that went is a deletion — reported, unfollowed, and nothing else disturbed.
+func TestDeletingTheOnlyFollowedAlbumDoesNotStopTheLibraryWalk(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one"})
+	h.source.albums = append(h.source.albums, gphotos.Album{ID: "album-2", Title: "Not followed"})
+	h.source.timeline = [][]gphotos.MediaItem{{{
+		MediaKey:   "key-loose",
+		CapturedAt: time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC),
+		Width:      100, Height: 100,
+	}}}
+	h.source.bodies["key-loose"] = []byte("loose")
+	if err := h.store.SetLibrary(store.SyncAll, time.Time{}); err != nil {
+		t.Fatalf("following the library: %v", err)
+	}
+	stopListing(h, "album-1")
+
+	report, err := h.syncer.Run(t.Context())
+	if err != nil {
+		t.Fatalf("deleting the only followed album ended the run: %v", err)
+	}
+	if h.source.timelinePagesServed() == 0 {
+		t.Error("the library was never walked")
+	}
+	if len(report.UnlistedAlbums) != 1 {
+		t.Errorf("the run reports %v unlisted, want the deleted album", report.UnlistedAlbums)
+	}
+}
+
+// followAlbum adds a second album to a harness that starts with one, so a test can ask what
+// happens to the albums behind the one that fails. Walk order is favourites, then title, then id.
+func followAlbum(t *testing.T, h *harness, albumID, title string, keys ...string) {
+	t.Helper()
+
+	for _, key := range keys {
+		h.source.items[albumID] = append(h.source.items[albumID], gphotos.MediaItem{
+			MediaKey:   key,
+			CapturedAt: time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC),
+			Width:      100, Height: 100,
+		})
+		h.source.bodies[key] = []byte(key)
+	}
+	h.source.albums = append(h.source.albums, gphotos.Album{ID: albumID, Title: title})
+
+	if err := h.store.UpsertAlbum(store.Album{ID: albumID, Title: title}, time.Now()); err != nil {
+		t.Fatalf("seeding %s: %v", albumID, err)
+	}
+	if err := h.store.SetAlbumSyncMode(albumID, store.SyncAll); err != nil {
+		t.Fatalf("following %s: %v", albumID, err)
+	}
+}
+
+// One album Google answers strangely used to cost the whole nightly backup: every album behind
+// it in the walk order and the library timeline behind them all went unread, every run, until
+// somebody noticed. Stepping over it is the difference between a broken album and a broken backup.
+func TestAnAlbumThatWillNotDecodeIsSteppedOverRatherThanEndingTheRun(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one"})
+	followAlbum(t, h, "album-2", "Zzz Last", "key-2")
+	h.source.albumItemsErrs["album-1"] = fmt.Errorf("%w: wanted an array of media items", gphotos.ErrProtocolDrift)
+
+	report, err := h.syncer.Run(t.Context())
+	if err != nil {
+		t.Fatalf("one undecodable album ended the run: %v", err)
+	}
+	if report.Listed != 1 || report.Downloaded != 1 {
+		t.Errorf("the run listed %d and downloaded %d, want the album behind the bad one to have been walked",
+			report.Listed, report.Downloaded)
+	}
+	if report.Outcome != store.OutcomePartial {
+		t.Errorf("a run that skipped an album recorded outcome %q, want partial", report.Outcome)
+	}
+	if len(report.SkippedAlbums) != 1 || !strings.Contains(report.SkippedAlbums[0], "album-1") {
+		t.Errorf("the run reports %v skipped, want the album that would not decode", report.SkippedAlbums)
+	}
+}
+
+// Stepping over an album is only safe because a partial listing never reaches reconciliation.
+// If it did, an album Google answered with nothing would have its whole contents written off as
+// deleted — which is the loss the strict decoders were put there to prevent in the first place.
+func TestASkippedAlbumKeepsEverythingItAlreadyHeld(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one"})
+	followAlbum(t, h, "album-2", "Zzz Last", "key-2")
+
+	if _, err := h.syncer.Run(t.Context()); err != nil {
+		t.Fatalf("the first run: %v", err)
+	}
+	h.source.albumItemsErrs["album-1"] = fmt.Errorf("%w: wanted an array of media items", gphotos.ErrProtocolDrift)
+	if _, err := h.syncer.Run(t.Context()); err != nil {
+		t.Fatalf("the second run: %v", err)
+	}
+
+	members, err := h.store.MembersOf("album-1")
+	if err != nil {
+		t.Fatalf("reading the skipped album: %v", err)
+	}
+	if !members["key-1"] {
+		t.Error("a skipped album lost the item it already held")
+	}
+}
+
+// The whole point of a strict decoder is that a run reading nothing must not pass for a run over
+// an empty account. Skipping restores a broken album; it must not quietly swallow broken decoders.
+func TestARunWhereNoAlbumDecodedIsStillReportedAsDrift(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one"})
+	followAlbum(t, h, "album-2", "Zzz Last", "key-2")
+	drift := fmt.Errorf("%w: wanted an array of media items", gphotos.ErrProtocolDrift)
+	h.source.albumItemsErrs["album-1"] = drift
+	h.source.albumItemsErrs["album-2"] = drift
+
+	report, err := h.syncer.Run(t.Context())
+	if !errors.Is(err, gphotos.ErrProtocolDrift) {
+		t.Fatalf("a run that decoded nothing ended with %v, want drift", err)
+	}
+	if report.Outcome != store.OutcomeDrift {
+		t.Errorf("a run that decoded nothing recorded outcome %q, want drift", report.Outcome)
+	}
+}
+
+// A signed-out session fails every album identically, so walking on would mean asking Google four
+// hundred more times for something it has already refused — the opposite of what skipping is for.
+func TestARejectedSessionStopsTheWalkInsteadOfSkipping(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one"})
+	followAlbum(t, h, "album-2", "Zzz Last", "key-2")
+	h.source.albumItemsErr = fmt.Errorf("%w: batchexecute answered with an HTML page", gphotos.ErrSessionRejected)
+
+	report, err := h.syncer.Run(t.Context())
+	if !errors.Is(err, gphotos.ErrSessionRejected) {
+		t.Fatalf("the run ended with %v, want the rejected session", err)
+	}
+	if len(report.SkippedAlbums) != 0 {
+		t.Errorf("a rejected session skipped %v, want the walk to have stopped", report.SkippedAlbums)
+	}
+	if walked := h.source.albumsWalked(); len(walked) != 1 {
+		t.Errorf("a rejected session was asked for %d albums (%v), want the walk to stop at the first",
+			len(walked), walked)
+	}
+}
+
+// A skipped album finishes the run with no error at all, so unless it reaches the one column the
+// run page reads, the album goes stale and nothing anywhere says which one or why.
+func TestTheRunPageIsToldWhichAlbumsWereSkipped(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one"})
+	followAlbum(t, h, "album-2", "Zzz Last", "key-2")
+	h.source.albumItemsErrs["album-1"] = fmt.Errorf("%w: wanted an array of media items", gphotos.ErrProtocolDrift)
+
+	if _, err := h.syncer.Run(t.Context()); err != nil {
+		t.Fatalf("running the sync: %v", err)
+	}
+
+	runs, err := h.store.RecentRuns(1)
+	if err != nil || len(runs) == 0 {
+		t.Fatalf("reading the run: %v", err)
+	}
+	for _, want := range []string{"could not be listed", "Holiday", "album-1"} {
+		if !strings.Contains(runs[0].Error, want) {
+			t.Errorf("the recorded run does not mention %q: %q", want, runs[0].Error)
+		}
+	}
+}
+
+// A run walks hundreds of albums and stops at the first one that will not decode, so the failure
+// has to say which. It also has to say what Google last claimed the album holds and when Google
+// last mentioned it, because that is what tells an album gone from the account apart from an
+// empty one and from real protocol drift.
+func TestAFailedAlbumListingNamesTheAlbumItStoppedAt(t *testing.T) {
+	h := newHarness(t, store.SyncAll, map[string]string{"key-1": "one"})
+
+	lastSeen := time.Date(2026, 9, 9, 2, 11, 0, 0, time.UTC)
+	seeded := store.Album{ID: "album-1", Title: "Holiday", Kind: store.AlbumShared, ItemCount: 24}
+	if err := h.store.UpsertAlbum(seeded, lastSeen); err != nil {
+		t.Fatalf("reseeding the album: %v", err)
+	}
+	h.source.albumItemsErr = errors.New("google refused the album listing")
+
+	_, err := h.syncer.ListAlbum(t.Context(), "album-1")
+	if err == nil {
+		t.Fatal("a refused listing succeeded")
+	}
+	for _, want := range []string{"album-1", "Holiday", "shared", "24", lastSeen.Format(time.RFC3339)} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the failure does not mention %q: %v", want, err)
+		}
+	}
+}
+
+// Two thirds of a real library's entries have no title of their own — bundles never do, and
+// albums need not — so the failure has to name them by what they are rather than print an empty
+// pair of quotes and leave the reader guessing which album broke.
+func TestAnAlbumWithNoTitleIsNamedByWhatItIs(t *testing.T) {
+	cases := map[store.Album]string{
+		{Title: "Holiday", Kind: store.AlbumOwned}:  `the album "Holiday"`,
+		{Title: "Holiday", Kind: store.AlbumShared}: `the shared album "Holiday"`,
+		{Kind: store.AlbumOwned}:                    "the untitled album",
+		{Kind: store.AlbumBundle}:                   "the untitled bundle of shared photos",
+	}
+
+	for album, want := range cases {
+		if got := nameOf(album); got != want {
+			t.Errorf("a %q album titled %q reads as %q, want %q", album.Kind, album.Title, got, want)
+		}
+	}
+}
+
+// Describing an album reads the store, which can itself fail — a row deleted between the walk
+// starting and it failing, a database that has gone away. The id is the part worth keeping when
+// nothing else can be read, because it is the part `gpb unfollow` takes.
+func TestAnAlbumTooBrokenToDescribeIsStillNamed(t *testing.T) {
+	h := newHarness(t, store.SyncAll, nil)
+
+	described := h.syncer.describeAlbum("album-nobody-recorded")
+	if !strings.Contains(described, "album-nobody-recorded") {
+		t.Errorf("an undescribable album reads as %q, want its id", described)
 	}
 }
 

@@ -355,10 +355,56 @@ there" figure would come from without walking the library.
 **Drift detection:** every decoder validates shape strictly (expected array arity, id
 formats, non-empty required fields — but note the Phase 0 spike found album *titles* are
 legitimately null for untitled albums, so "required" must be established against real
-captures rather than assumed) and on mismatch returns a distinct `ErrProtocolDrift`
-carrying a scrubbed sample of the payload, rather than limping on with partial data. The
-daemon runs a cheap **canary** before each sync — fetch page one of a designated small
-album and decode it — so drift is caught by one request, loudly, instead of mid-run.
+captures rather than assumed) and on mismatch returns a distinct `ErrProtocolDrift`, rather
+than limping on with partial data. The error names the position it walked to *and* prints a
+skeleton of the whole payload — arity and types, never values, so it can travel in a log
+line without carrying the user's library with it. The skeleton is there because the position
+alone underdescribes the failure: "found nothing at `snAcKc[1]`" reads identically whether
+Google sent `null`, `[]`, `[null]`, or an array whose second slot has moved, and those are
+four different bugs with four different fixes.
+
+**What a run does about drift depends on how much of it there is.** A single album whose
+contents will not decode is stepped over: the run records which album it was, walks the rest,
+and finishes `partial` with the skipped albums named in its detail line. Stepping over is
+safe only because a listing that failed returns before reconciling, so a skipped album keeps
+every link it has and merely goes another day unrefreshed — the early return in `listAlbum`
+is load-bearing for the skip as well as for itself. If *no* followed album decoded, the
+decoders are wrong rather than the album, and the run fails as `drift`: a run that read
+nothing, reported as a success, would look exactly like an account with no photos in it,
+which is the one reading strict decoders exist to prevent. The rule is that plain — whether
+anything decoded — with no threshold to tune and no count to get wrong.
+
+Only drift is stepped over among failures. A rejected session means the account is signed out
+and the next four hundred albums would fail identically; a cancelled context means the daemon
+is stopping. Neither improves for being asked again four hundred times. The library timeline
+is not skipped either: it is one listing rather than one of four hundred, so there is nothing
+left to salvage behind it.
+
+**A followed album Google has stopped listing is not walked at all.** Following outlives
+listing — nothing clears `sync_mode` when an album is deleted or a share is withdrawn — so
+its id would otherwise be asked for on every run for ever, and the answer would not be a
+listing of anything. The refresh at the top of each run is what knows: every album Google
+still names carries that refresh's instant in `last_seen_at`, and one that does not has gone.
+The run reports it, says to unfollow it, and costs one request less rather than one more.
+
+Believing that requires the listing to be worth believing, and the count of albums Google
+named is what says so. A followed album missing from a listing of two hundred has gone. A
+followed album missing from a listing of *none* says only that the listing came back empty,
+and acted on, it would leave the user with a backup that had quietly stopped walking
+anything — so a listing that named no albums at all fails the run instead. The count that
+went missing cannot make this distinction: it is "all of them" either way.
+
+The **canary** — fetching page one of a designated small album before each sync, so drift is
+caught by one request instead of mid-run — is **not built**. Stepping over a drifted album
+took the urgency out of it, since a run no longer dies at the first bad album; but a run
+against genuinely drifted decoders still walks every followed album before concluding as
+much, and that request budget is what a canary would save.
+
+Writing the offending payload to a file for later study is **not built** either. The skeleton
+in the error is what a maintainer actually reads, and it reaches them through the log and the
+run page without a new directory to secure: a whole payload is media keys, signed URLs and
+album titles, which is to say the library itself, and it would want the same care as the
+Phase 0 captures for the sake of a debugging aid nobody has yet needed.
 
 The HTTP client sends the same User-Agent string as the profile's Chrome — read from the
 running browser at each warmup, not baked into the binary, so Chrome package upgrades
@@ -566,9 +612,10 @@ CREATE TABLE sync_runs (
     id          INTEGER PRIMARY KEY,
     started_at  TEXT NOT NULL,
     finished_at TEXT,
-    outcome     TEXT,                        -- ok | partial | auth_required | drift | error
+    outcome     TEXT,                        -- ok | partial | auth_required | drift
+                                             -- | interrupted | error
     listed      INTEGER, downloaded INTEGER, failed INTEGER, bytes INTEGER,
-    error       TEXT
+    error       TEXT                         -- the failure, the albums skipped, or both
 );
 ```
 
@@ -1078,7 +1125,8 @@ moves to another address.
 | Session dead (re-auth needed) | Warmup cannot reach logged-in photos.google.com | `AUTH_REQUIRED`: suspend syncs, keep gentle keepalive probing | notify `auth_required` with `/reauth` link, unhealthy healthcheck, `status`, banner on every web page |
 | Warmup could not be made | Browser will not start, no network, timeout — anything that is not Google saying no | `WARMUP_FAILED`: keep the session and the last verdict, retry on the next keepalive; never ask for a sign-in the user cannot usefully give | notify `warmup_failed`, warn banner on every web page, `session_problem` in Home Assistant |
 | Login rejected as automated | `signin/rejected` URL during login | Surface clearly on the `/reauth` page; retry via desktop-run-container fallback (§6) | `/reauth` page |
-| Protocol drift | Strict decoders → `ErrProtocolDrift` (canary catches most before a run) | Abort run, persist scrubbed sample payload to `/data/drift/` for debugging | notify `drift_detected`, unhealthy |
+| Protocol drift | Strict decoders → `ErrProtocolDrift`, naming the position and a scrubbed skeleton of the payload | One album: skip it, finish `partial`, name it on the run. No album decoded: abort the run as `drift` | `sync_runs.outcome`, the run's detail line on `/runs`, and after a `drift` a warn banner on every page |
+| Followed album gone from Google | Its `last_seen_at` predates the refresh at the top of the run | Do not walk it, finish `partial`, name it and say to unfollow it. Album listing named nothing at all: abort the run instead | `sync_runs.outcome`, the run's detail line on `/runs` |
 | Partial/corrupt download | Length mismatch, hash recorded at write; `verify` re-hashes later | Delete `.part`, retry with backoff, `failed` after N attempts | run summary, `!` badge in grid |
 | Disk full | Preflight free-space check (require estimated run size + margin); `ENOSPC` mid-write | Abort before starting, or abort run cleanly; `.part` removed | notify `disk_full` |
 | Chrome won't start / zombie | chromedp context error / warmup timeout | Kill process tree, retry once, else treat as failed warmup | notify on repeat |
@@ -1125,8 +1173,9 @@ The inherited stance, still true:
   Anyone who can read `/data/profile` can read the user's Gmail. This is inherent to the
   approach and must be understood.
 - Containment, not theatre: `/data` mode 0700, container runs non-root, cookies and tokens
-  never logged (the `Session` type has no `String`/`MarshalJSON` exposing values), drift
-  payload samples scrubbed of cookie headers before persisting.
+  never logged (the `Session` type has no `String`/`MarshalJSON` exposing values), and drift
+  reports carrying the arity and types of a payload but never a value from inside it — no
+  payload is written to disk at all, so there is no second copy of the library to protect.
 - At-rest encryption of the profile inside the same always-on box is deliberately **not**
   attempted: the daemon would need the key on the same disk to run unattended, so it adds
   a step, not a barrier. If at-rest protection matters, encrypt the volume itself.

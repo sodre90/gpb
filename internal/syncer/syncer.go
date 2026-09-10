@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -150,8 +151,15 @@ type Report struct {
 	Failed     int
 	Skipped    int
 	Bytes      int64
-	Outcome    store.Outcome
-	Err        error
+	// SkippedAlbums names the albums whose contents would not decode, and UnlistedAlbums the ones
+	// Google has stopped listing at all. Both went unread and the run finished anyway, but they
+	// ask different things of the user — a bug report and an unfollow — so they are counted apart.
+	// Both are descriptions rather than ids because this is what the run page shows a person, and
+	// an id on its own tells them nothing about what went unread.
+	SkippedAlbums  []string
+	UnlistedAlbums []string
+	Outcome        store.Outcome
+	Err            error
 }
 
 func New(source Source, db *store.Store, options Options) *Syncer {
@@ -231,7 +239,7 @@ func (s *Syncer) listAndDownload(ctx context.Context, backlog []store.MediaItem,
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	var listed int
+	var listed listingResult
 	var listErr error
 	listingDone := make(chan struct{})
 	go func() {
@@ -247,7 +255,9 @@ func (s *Syncer) listAndDownload(ctx context.Context, backlog []store.MediaItem,
 	<-listingDone
 	s.tidyStagingDirectory()
 
-	report.Listed = listed
+	report.Listed = listed.listed
+	report.SkippedAlbums = listed.skipped
+	report.UnlistedAlbums = listed.unlisted
 	return report, worseOf(downloadErr, listErr)
 }
 
@@ -281,19 +291,37 @@ func pendingKeys(items []store.MediaItem) map[string]bool {
 // albums this account owns plus nameless bundles of shared photos; the shared listing repeats
 // those albums and adds the ones other people shared, which the first listing omits entirely.
 func (s *Syncer) RefreshAlbums(ctx context.Context) error {
-	seenAt := time.Now()
+	_, err := s.refreshAlbums(ctx)
+	return err
+}
 
-	owned, err := s.recordListing(ctx, s.source.Albums, seenAt, nil)
+// albumRefresh is what one pass over the album listings amounts to. The instant is the dividing
+// line a walk needs: every album Google still knows about carries it in last_seen_at afterwards,
+// and one that does not is an album Google has stopped listing. The count is how much that
+// dividing line can be trusted — an album missing from a listing of two hundred has gone, while
+// an album missing from a listing of none says only that the listing came back empty.
+type albumRefresh struct {
+	at       time.Time
+	recorded int
+}
+
+func (s *Syncer) refreshAlbums(ctx context.Context) (albumRefresh, error) {
+	refresh := albumRefresh{at: time.Now()}
+
+	owned, err := s.recordListing(ctx, s.source.Albums, refresh.at, nil)
 	if err != nil {
-		return fmt.Errorf("listing albums: %w", err)
+		return refresh, fmt.Errorf("listing albums: %w", err)
 	}
 	// The shared listing's own entries do not say which of the two they are — an album this
 	// account owns looks exactly like one shared with it — so the album listing having already
 	// claimed an id is what separates them.
-	if _, err := s.recordListing(ctx, s.source.SharedAlbums, seenAt, owned); err != nil {
-		return fmt.Errorf("listing shared albums: %w", err)
+	shared, err := s.recordListing(ctx, s.source.SharedAlbums, refresh.at, owned)
+	if err != nil {
+		return refresh, fmt.Errorf("listing shared albums: %w", err)
 	}
-	return nil
+
+	refresh.recorded = len(owned) + len(shared)
+	return refresh, nil
 }
 
 type listing func(ctx context.Context, pageToken string) (gphotos.AlbumPage, error)
@@ -335,46 +363,159 @@ func (s *Syncer) recordListing(ctx context.Context, fetch listing,
 //
 // Each phase is timed because the run log used to print one total at the end, which said nothing
 // about where a long run spent its time.
-func (s *Syncer) list(ctx context.Context) (int, error) {
+func (s *Syncer) list(ctx context.Context) (listingResult, error) {
 	startedAt := time.Now()
-	if err := s.RefreshAlbums(ctx); err != nil {
-		return 0, err
+	refresh, err := s.refreshAlbums(ctx)
+	if err != nil {
+		return listingResult{}, err
 	}
 
 	followed, err := s.store.FollowedAlbums()
 	if err != nil {
-		return 0, err
+		return listingResult{}, err
 	}
 	log.Printf("syncer: %d albums to walk, listed in %s", len(followed), since(startedAt))
 
 	albumsStartedAt := time.Now()
-	listed := 0
-	for _, album := range followed {
-		walkStartedAt := time.Now()
-		count, err := s.listAlbum(ctx, album.ID)
-		if err != nil {
-			return listed, err
-		}
-		log.Printf("syncer: an album walk recorded %d items in %s", count, since(walkStartedAt))
-		listed += count
+	walk, err := s.walkAlbums(ctx, followed, refresh)
+	result := walk.result()
+	if err != nil {
+		return result, err
 	}
 	albumTime := since(albumsStartedAt)
 
 	library, err := s.store.Library()
 	if err != nil {
-		return listed, err
+		return result, err
 	}
 	if library.SyncMode == store.SyncNone {
 		log.Printf("syncer: listing finished in %s — %d albums in %s, the library is not followed",
 			since(startedAt), len(followed), albumTime)
-		return listed, nil
+		return result, nil
 	}
 
 	libraryStartedAt := time.Now()
 	count, err := s.listLibrary(ctx, library.Since)
 	log.Printf("syncer: listing finished in %s — %d albums in %s, the library walk in %s",
 		since(startedAt), len(followed), albumTime, since(libraryStartedAt))
-	return listed + count, err
+	result.listed += count
+	return result, err
+}
+
+// listingResult is what the listing half of a run reports back: how much it recorded, and the
+// albums it did not read. The two kinds of unread album are kept apart because they ask different
+// things of the user — an album that will not decode is a bug to be reported, while an album
+// Google no longer lists is one to stop following.
+type listingResult struct {
+	listed   int
+	skipped  []string
+	unlisted []string
+}
+
+// albumWalk is the album half of that, plus what it takes to judge the walk as a whole.
+type albumWalk struct {
+	listed   int
+	walked   int
+	skipped  []string
+	unlisted []string
+	drifted  error
+	attempts int
+	// listingWasEmpty records that Google named no albums at all this run, which is the difference
+	// between albums that have gone and a listing not worth believing.
+	listingWasEmpty bool
+}
+
+func (w albumWalk) result() listingResult {
+	return listingResult{listed: w.listed, skipped: w.skipped, unlisted: w.unlisted}
+}
+
+// walkAlbums lists every followed album, stepping over the two kinds it cannot usefully read.
+//
+// The first is an album Google has stopped listing — deleted, or a share withdrawn. Following
+// outlives listing: nothing clears sync_mode when an album goes, so its id is asked for on every
+// run forever, and the answer is not a listing of anything. The refresh that just ran is what
+// says so, and skipping costs one request less per run rather than one more.
+//
+// The second is an album whose contents will not decode. A single one used to cost the entire
+// nightly backup, including every album after it in the walk order and the library timeline
+// behind them. Stepping over it is safe because listAlbum returns before reconciling: a skipped
+// album keeps every link it has and merely goes another day unrefreshed.
+//
+// Only drift is stepped over among failures. A rejected session means the account is signed out
+// and the next four hundred albums would fail identically; a cancelled context means the daemon
+// is stopping. Neither improves by being asked again four hundred times.
+func (s *Syncer) walkAlbums(ctx context.Context, followed []store.Album, refresh albumRefresh) (albumWalk, error) {
+	walk := albumWalk{listingWasEmpty: refresh.recorded == 0}
+	for _, album := range followed {
+		if album.LastSeenAt.Before(refresh.at) {
+			walk.unlisted = append(walk.unlisted, describeAlbum(album))
+			continue
+		}
+
+		walkStartedAt := time.Now()
+		count, err := s.listAlbum(ctx, album.ID)
+		walk.listed += count
+		walk.attempts++
+
+		switch {
+		case err == nil:
+			walk.walked++
+			log.Printf("syncer: an album walk recorded %d items in %s", count, since(walkStartedAt))
+		case errors.Is(err, gphotos.ErrProtocolDrift):
+			walk.skipped = append(walk.skipped, s.describeAlbum(album.ID))
+			if walk.drifted == nil {
+				walk.drifted = err
+			}
+			log.Printf("syncer: leaving an album as it is and walking on: %v", err)
+		default:
+			return walk, err
+		}
+	}
+	return walk, walk.verdict()
+}
+
+// verdict separates one album Google answers strangely from a protocol that has changed
+// underneath the whole run. If nothing decoded, the decoders are wrong rather than the album,
+// and a run that read nothing has to say so: reported as a success it would look like an account
+// with no photos in it, which is the one reading the strict decoders exist to prevent. Whether
+// anything decoded is the whole rule — there is no threshold to tune and no count to get wrong.
+//
+// An album listing that named nothing at all gets the same treatment and for the same reason.
+// A followed album missing from a listing of two hundred has gone, and not walking it is right;
+// a followed album missing from a listing of none says only that the listing came back empty,
+// and believed, it would leave the user with a backup that had quietly stopped walking anything.
+// The count of albums Google named is what tells those apart — not the count that went missing,
+// which is the same "all of them" in both.
+func (w albumWalk) verdict() error {
+	if w.drifted != nil && w.walked == 0 {
+		return w.drifted
+	}
+	if w.listingWasEmpty && len(w.unlisted) > 0 {
+		return fmt.Errorf("google's album listing named no albums at all, so none of the %d "+
+			"this account follows could be walked", len(w.unlisted))
+	}
+	w.reportWhatItStepped()
+	return nil
+}
+
+func (w albumWalk) reportWhatItStepped() {
+	switch len(w.skipped) {
+	case 0:
+	case 1:
+		log.Printf("syncer: 1 of %d albums could not be listed and was left as it was", w.attempts)
+	default:
+		log.Printf("syncer: %d of %d albums could not be listed and were left as they were",
+			len(w.skipped), w.attempts)
+	}
+
+	switch len(w.unlisted) {
+	case 0:
+	case 1:
+		log.Print("syncer: 1 followed album is no longer listed by Google and was not walked")
+	default:
+		log.Printf("syncer: %d followed albums are no longer listed by Google and were not walked",
+			len(w.unlisted))
+	}
 }
 
 // since rounds to the second because these are phases measured in minutes and nobody reading a
@@ -495,6 +636,10 @@ func (s *Syncer) ListAlbum(ctx context.Context, albumID string) (int, error) {
 // listAlbum pages one album to the end and then reconciles: anything previously linked but
 // not seen in this pass has gone from the album upstream. The full walk is what makes that
 // inference safe, so a partial listing must never reach the reconciliation step.
+//
+// That early return is load-bearing beyond this function: walkAlbums steps over an album whose
+// contents will not decode, and it is only safe to do so because a listing that failed leaves
+// the album's links exactly as it found them.
 func (s *Syncer) listAlbum(ctx context.Context, albumID string) (int, error) {
 	listedAt := time.Now()
 	listed := 0
@@ -508,7 +653,7 @@ func (s *Syncer) listAlbum(ctx context.Context, albumID string) (int, error) {
 	for token := ""; ; {
 		page, err := s.source.AlbumItems(ctx, albumID, token)
 		if err != nil {
-			return listed, fmt.Errorf("listing album items: %w", err)
+			return listed, fmt.Errorf("listing the items of %s: %w", s.describeAlbum(albumID), err)
 		}
 
 		for _, item := range page.Items {
@@ -544,6 +689,53 @@ func (s *Syncer) listAlbum(ctx context.Context, albumID string) (int, error) {
 	}
 
 	return listed, s.store.MarkAlbumSynced(albumID, listedAt)
+}
+
+// describeAlbum names a failing album in the terms that tell its failures apart. The id alone
+// would say which row broke without saying anything about why, and the three ways an album
+// listing fails look identical in the decoder: an album Google has stopped listing was last seen
+// before this run started, an empty album was seen just now holding nothing, and real protocol
+// drift was seen just now holding something. The title is here because it is what the person
+// reading the log calls the album, and the id because it is what `gpb unfollow` takes.
+func (s *Syncer) describeAlbum(albumID string) string {
+	album, err := s.store.Album(albumID)
+	if err != nil {
+		return fmt.Sprintf("album %s", albumID)
+	}
+	return describeAlbum(album)
+}
+
+func describeAlbum(album store.Album) string {
+	held := fmt.Sprintf("%d items", album.ItemCount)
+	if album.ItemCount == 1 {
+		held = "1 item"
+	}
+	return fmt.Sprintf("%s (%s), which Google last listed as holding %s on %s",
+		nameOf(album), album.ID, held, album.LastSeenAt.Format(time.RFC3339))
+}
+
+// nameOf says what to call an album in a sentence. Kind carries the name where a title cannot: a
+// bundle has no title in any response Google serves, and an album may simply not have one, so an
+// empty pair of quotes would be the least informative thing to print. internal/web says the same
+// at more length for the pages, and the two are free to differ — a log line is not a table cell.
+func nameOf(album store.Album) string {
+	if album.Title == "" {
+		return "the untitled " + kindNoun(album.Kind)
+	}
+	return fmt.Sprintf("the %s %q", kindNoun(album.Kind), album.Title)
+}
+
+func kindNoun(kind store.AlbumKind) string {
+	switch kind {
+	case store.AlbumShared:
+		return "shared album"
+	case store.AlbumBundle:
+		return "bundle of shared photos"
+	case store.AlbumLibrary:
+		return "library"
+	default:
+		return "album"
+	}
 }
 
 // membersToCompareAgainst returns what the album held before this listing, or nil when nothing
@@ -887,7 +1079,7 @@ func (s *Syncer) finish(report Report, err error) (Report, error) {
 		Downloaded: report.Downloaded,
 		Failed:     report.Failed,
 		Bytes:      report.Bytes,
-		Error:      errorText(err),
+		Error:      runDetail(report),
 	}, time.Now()); storeErr != nil {
 		log.Printf("syncer: could not record the run: %v", storeErr)
 	}
@@ -916,18 +1108,43 @@ func outcomeOf(report Report, err error) store.Outcome {
 		return store.OutcomeInterrupted
 	case err != nil:
 		return store.OutcomeError
-	case report.Failed > 0:
+	// An album left unread is not a failure — nothing was lost and nothing was written off — but
+	// it is not the whole job either, and a run reported as ok is one nobody looks at again.
+	case report.Failed > 0 || len(report.SkippedAlbums) > 0 || len(report.UnlistedAlbums) > 0:
 		return store.OutcomePartial
 	default:
 		return store.OutcomeOK
 	}
 }
 
-func errorText(err error) string {
-	if err == nil {
-		return ""
+// runDetail is what the run page shows underneath a run. A run that stepped over albums finished
+// with no error at all and still has something the reader needs told, and sync_runs has one
+// column to tell them in — so the failure and the albums it did not read share it, in that order.
+func runDetail(report Report) string {
+	details := make([]string, 0, 3)
+	if report.Err != nil {
+		details = append(details, report.Err.Error())
 	}
-	return err.Error()
+	if len(report.SkippedAlbums) > 0 {
+		details = append(details, listAlbums(report.SkippedAlbums,
+			"could not be listed and was left as it was",
+			"could not be listed and were left as they were"))
+	}
+	if len(report.UnlistedAlbums) > 0 {
+		details = append(details, listAlbums(report.UnlistedAlbums,
+			"is no longer listed by Google and was not walked — everything it held is kept, "+
+				"and unfollowing it will clear this notice",
+			"are no longer listed by Google and were not walked — everything they held is kept, "+
+				"and unfollowing them will clear this notice"))
+	}
+	return strings.Join(details, "\n")
+}
+
+func listAlbums(albums []string, one, many string) string {
+	if len(albums) == 1 {
+		return "One album " + one + ": " + albums[0]
+	}
+	return fmt.Sprintf("%d albums %s: %s", len(albums), many, strings.Join(albums, "; "))
 }
 
 // toStoreAlbum resolves the owner against the signed-in account here, because this is the only
