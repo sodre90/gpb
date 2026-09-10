@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.4 — 2026-09-10
+
+- **An album with nothing in it is no longer read as a broken one.** Google answers an empty
+  album with the same page as any other — cursor, album record, the lot — and simply nothing
+  where the list of items goes, rather than an empty list. Every decoder here is strict on
+  purpose, so that read as a failure, and a library that was entirely backed up finished
+  `partial` every night with a real album named as unreadable. 0.1.3's drift reports are what
+  found it: the payload skeleton beside the position said this page was well formed, and the
+  album's own line said Google had listed it that same afternoon as holding nothing.
+- **And a walk that lists nothing now has to agree with Google before anything is written off.**
+  Reading a page with no items as an empty album would read the same way if Google ever moved
+  the items elsewhere in the page — and taken at face value that would empty every album in the
+  backup at once. The album listing at the top of every run carries Google's own count, which
+  settles it: nothing listed for an album Google calls empty is an empty album, and nothing
+  listed for an album Google says holds twenty-four stops the run as drift. The library walk has
+  had a rule of this shape since the beginning, for the reason an account is never empty.
+
 ## 0.1.3 — 2026-09-10
 
 - **One album that cannot be read no longer costs the whole backup.** A run walks the followed
