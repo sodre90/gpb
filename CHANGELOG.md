@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.1.3 — 2026-09-10
+
+- **One album that cannot be read no longer costs the whole backup.** A run walks the followed
+  albums in order and used to stop at the first one Google answered strangely — so every album
+  behind it, and the library timeline behind them all, went unread. Every run, until somebody
+  looked at the log. A run now walks on and finishes `partial`, naming what it could not read.
+  Nothing is lost by walking on: a listing that failed returns before the step that works out
+  what has been deleted, so an album that was not read keeps everything it held.
+- **An album Google has stopped listing is no longer asked for.** Following outlives listing —
+  nothing clears an album's sync mode when it is deleted or a share is withdrawn — so its id was
+  sent on every run for ever and answered with something that was not a listing. The run now
+  says which albums those are and that unfollowing them will clear the notice.
+- **Two guards, so that this stays a loud failure where it should be.** If *no* album decoded,
+  the decoders are wrong rather than the album and the run still fails as `drift`: a run that
+  read nothing, reported as a success, would look exactly like an account with no photos in it.
+  And if Google's album listing named nothing at all, the run fails rather than treating every
+  followed album as deleted — an album missing from a listing of two hundred has gone, while one
+  missing from a listing of none says only that the listing came back empty.
+- **Drift reports now say what shape arrived.** The error named the position it walked to and
+  nothing else, which reads identically whether Google sent `null`, an empty array, an envelope
+  with a hole in it, or an array whose slots have moved — four different bugs with four different
+  fixes. It now prints a skeleton of the payload beside the position: arity and types only, never
+  a value, so it can go in a log without carrying the library with it. The failing album is named
+  too, with what Google last said it held and when Google last mentioned it, which is what tells
+  a deleted album, an empty one and real protocol drift apart.
+
 ## 0.1.2 — 2026-08-14
 
 - **`verify` counts a file before it says it read it.** The progress line was printed between
