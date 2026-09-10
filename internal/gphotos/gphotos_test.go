@@ -469,6 +469,53 @@ func TestDecodersRejectDriftWithAPath(t *testing.T) {
 	}
 }
 
+// A missing items array is reported the same way whether the album is empty, gone, or genuinely
+// drifted, so the position on its own does not say which happened. The payload skeleton is what
+// separates them, and it is the only thing in the error a maintainer can act on.
+func TestDriftErrorsCarryThePayloadSkeleton(t *testing.T) {
+	cases := map[string]struct {
+		payload any
+		want    string
+	}{
+		"no payload at all":       {payload: nil, want: "the payload is null"},
+		"an empty envelope":       {payload: []any{}, want: "the payload is []"},
+		"an envelope with a hole": {payload: []any{nil}, want: "the payload is [null]"},
+		"a page that kept its cursor": {
+			payload: []any{nil, nil, "cursor"},
+			want:    "the payload is [null,null,str]",
+		},
+	}
+
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := decodeItemPage(test.payload)
+			if !errors.Is(err, ErrProtocolDrift) {
+				t.Fatalf("got %v, want an ErrProtocolDrift", err)
+			}
+			if !strings.Contains(err.Error(), test.want) {
+				t.Errorf("the drift error does not describe the payload as %q: %v", test.want, err)
+			}
+		})
+	}
+}
+
+// The skeleton travels in logs and notifications, so it may report arity and type and nothing
+// else. A media key, a signed URL or an album title in a drift report is a leak.
+func TestThePayloadSkeletonQuotesNoValues(t *testing.T) {
+	payload := []any{
+		"AF1Qip371E574DEE0F2D643E2D8F1A357BD630844BC6",
+		map[string]any{"76647426": []any{4000.0}},
+		"https://photos.fife.usercontent.google.com/scrubbed/7ecf1b4e",
+	}
+
+	err := rootOf(payload, albumItemsRPC).at(9).driftf("something absent")
+	for _, secret := range []string{"AF1Qip", "76647426", "usercontent", "4000"} {
+		if strings.Contains(err.Error(), secret) {
+			t.Errorf("the drift error leaks %q: %v", secret, err)
+		}
+	}
+}
+
 // The empty page token is how every caller learns a walk finished, and the syncer reconciles
 // an album against that — anything it did not see this pass is recorded as gone from Google.
 // So the last page must still decode, and only a genuinely absent cursor may produce the

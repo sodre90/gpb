@@ -14,17 +14,23 @@ var ErrProtocolDrift = errors.New("google photos response did not match the expe
 // tree is a positional reader over a decoded batchexecute payload. Google's arrays are
 // heterogeneous, sparse and long, so every step records the path it walked; a shape change
 // then surfaces as a drift error naming the exact position instead of a nil-map panic.
+//
+// Every node carries the whole payload it was walked from as well, purely so a drift error can
+// print its skeleton. The position alone underdescribes the failure: "found nothing at
+// snAcKc[1]" reads the same whether Google sent null, an empty array, or an array whose second
+// slot moved — and those are three different bugs with three different fixes.
 type tree struct {
 	value any
+	root  any
 	path  string
 }
 
 func rootOf(value any, label string) tree {
-	return tree{value: value, path: label}
+	return tree{value: value, root: value, path: label}
 }
 
 func (t tree) at(index int) tree {
-	child := tree{path: fmt.Sprintf("%s[%d]", t.path, index)}
+	child := tree{root: t.root, path: fmt.Sprintf("%s[%d]", t.path, index)}
 	if list, ok := t.value.([]any); ok && index >= 0 && index < len(list) {
 		child.value = list[index]
 	}
@@ -32,7 +38,7 @@ func (t tree) at(index int) tree {
 }
 
 func (t tree) key(name string) tree {
-	child := tree{path: fmt.Sprintf("%s[%q]", t.path, name)}
+	child := tree{root: t.root, path: fmt.Sprintf("%s[%q]", t.path, name)}
 	if object, ok := t.value.(map[string]any); ok {
 		child.value = object[name]
 	}
@@ -45,7 +51,7 @@ func (t tree) key(name string) tree {
 func (t tree) last() tree {
 	list, ok := t.value.([]any)
 	if !ok || len(list) == 0 {
-		return tree{path: t.path + "[last]"}
+		return tree{root: t.root, path: t.path + "[last]"}
 	}
 	return t.at(len(list) - 1)
 }
@@ -54,7 +60,7 @@ func (t tree) last() tree {
 // number rather than a name, so reading it by key would hard-code a digit string that carries
 // no meaning here and would drift the day the field is renumbered.
 func (t tree) only() tree {
-	child := tree{path: t.path + "{}"}
+	child := tree{root: t.root, path: t.path + "{}"}
 	object, ok := t.value.(map[string]any)
 	if !ok || len(object) != 1 {
 		return child
@@ -99,8 +105,14 @@ func (t tree) cursor() (string, error) {
 }
 
 func (t tree) driftf(want string) error {
-	return fmt.Errorf("%w: wanted %s at %s, found %s", ErrProtocolDrift, want, t.path, t.describe())
+	return fmt.Errorf("%w: wanted %s at %s, found %s — the payload is %s",
+		ErrProtocolDrift, want, t.path, t.describe(), sampleShape(t.root, payloadSampleDepth))
 }
+
+// payloadSampleDepth expands the payload's outer array and names the type of each slot in it,
+// which is the level that tells the shapes above apart. Going deeper would start counting the
+// user's photos in an error string.
+const payloadSampleDepth = 1
 
 // describe names the shape found without echoing its contents: payloads carry media keys,
 // signed URLs and album titles, none of which belong in an error string that reaches a log.
