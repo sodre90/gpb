@@ -1610,11 +1610,7 @@ a network filesystem — local disk.)*
     name is gone from everything but the checkout path on the box it was first deployed to.
     Settled at the 0.1.0 tag, which is also where the product name stopped being an internal
     matter: "gpb" is the name, "Google Photos" appears only descriptively, and the
-    not-affiliated disclaimer lives in NOTICE. The repository itself was `google-photos-sync`
-    until shortly after it went public, when the same rule was turned on it: a trademark is
-    fine describing what a thing talks to and wrong as the thing's own name, and a repository
-    name is a name. GitHub redirects the old path for clones and for the web, and the
-    description and the topics still say Google Photos, which is where saying it belongs.
+    not-affiliated disclaimer lives in NOTICE.
 14. **RESOLVED — how to tell a logged-out session from a logged-in one.** The original
     plan leaned on the landing URL: bounce to `accounts.google.com` means signed out.
     Phase 1 disproved it. A logged-out visit to `photos.google.com` is served Google

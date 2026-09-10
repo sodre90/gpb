@@ -34,11 +34,6 @@
   cost something: the first full sweep of the library was read as having found a bad file when
   it had found none. That sweep re-read all 96,439 backed-up files in three hours eight minutes
   and found every one of them intact.
-- **The repository is now [`github.com/sodre90/gpb`](https://github.com/sodre90/gpb)**, renamed
-  from `google-photos-sync`. A trademark is fine describing what a thing talks to and wrong as
-  the thing's own name; the binary, the image and the container were already `gpb`, and this was
-  the last place they were not. GitHub redirects the old path, so nothing that pointed at it
-  breaks.
 
 ## 0.1.1 — 2026-08-13
 
