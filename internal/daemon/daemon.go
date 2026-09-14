@@ -41,6 +41,9 @@ type Daemon struct {
 
 	stateMu           sync.Mutex
 	lastReportedState auth.State
+
+	countsMu sync.Mutex
+	counts   dashboardCounts
 }
 
 func New(cfg config.Config) (*Daemon, error) {

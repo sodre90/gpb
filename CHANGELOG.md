@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.3 — 2026-09-14
+
+- **An idle daemon no longer spends a tenth of a core counting the backup.** The Home
+  Assistant bridge asked for the backup-set counts every five seconds, and counting them walks
+  every item — two seconds of one core over 97,000 with the pure-Go SQLite, on the store's
+  single connection, whether or not anything had changed. The counts are now remembered and
+  recounted every 30 s while a run is going and every 5 min otherwise; the activity, the
+  session state and what is downloading are still reported every five seconds.
+
 ## 0.3.2 — 2026-09-14
 
 - **The Review page took nine seconds, and every other page waited behind it.** The list of
