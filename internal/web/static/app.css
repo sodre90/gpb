@@ -672,8 +672,9 @@ details.diagnostics summary {
 /* ---------- item grid ---------- */
 
 .grid {
+  --thumb-size: 9rem;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--thumb-size), 1fr));
   gap: var(--s-2);
   margin: var(--s-4) 0;
 }
@@ -711,7 +712,7 @@ details.diagnostics summary {
 .grid-cell .thumb {
   display: block;
   width: 100%;
-  height: 9rem;
+  height: var(--thumb-size);
   object-fit: cover;
   background-color: color-mix(in srgb, currentColor 10%, transparent);
 }
@@ -739,7 +740,7 @@ details.diagnostics summary {
 /* A grid that has not been listed yet shows this instead of nothing, so the wait reads as
    loading rather than as an empty album. */
 .grid-skeleton .grid-cell {
-  height: 9rem;
+  height: var(--thumb-size);
 }
 
 .grid-cell figcaption {
@@ -913,12 +914,7 @@ iframe.vnc {
   }
 
   .grid {
-    grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
-  }
-
-  .grid-cell .thumb,
-  .grid-skeleton .grid-cell {
-    height: 6.5rem;
+    --thumb-size: 6.5rem;
   }
 
   iframe.vnc {
@@ -939,11 +935,16 @@ iframe.vnc {
 
 /* The expand button fades in on hover so it is not clutter on a page of them, and is always
    there for the keyboard, which cannot click a photo. On a picking grid it is the only way in:
-   a click on the cell there already means "back this one up". */
+   a click on the cell there already means "back this one up".
+
+   It sits in the picture's bottom-right corner: the top-right belongs to the status marks, the
+   top-left to the tick, and below the picture is the caption. The corner is measured from the
+   picture's own height rather than the cell's bottom, which the caption would put it under. */
 .grid-expand {
   position: absolute;
-  top: var(--s-1);
+  top: calc(var(--thumb-size) - var(--s-1));
   right: var(--s-1);
+  translate: 0 -100%;
   padding: 0 var(--s-2);
   font-size: var(--t-small);
   line-height: 1.6;
