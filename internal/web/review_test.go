@@ -192,6 +192,42 @@ func TestAcknowledgingAMissingItemLeavesItsStateAndFileAlone(t *testing.T) {
 	}
 }
 
+// Writing an item off replaces 'done' with 'missing upstream' in its state, but the file it
+// names is still on disk — and that file is the whole point of the page. The cell has to say it
+// holds the file, or the viewer opens Google's thumbnail and calls the item not backed up yet.
+func TestAWrittenOffItemStillOnDiskIsShownAsHeld(t *testing.T) {
+	server, _ := testServer(t)
+	handler := server.Handler()
+	cookie := login(t, handler)
+	now := time.Now()
+
+	seedAlbums(t, server, store.Album{ID: "iceland", Title: "Iceland 2024", ItemCount: 1})
+	if err := server.store.SetAlbumSyncMode("iceland", store.SyncAll); err != nil {
+		t.Fatalf("setting the sync mode: %v", err)
+	}
+	seedPickedItem(t, server, "iceland", "gone-1", now)
+	backedUp := store.MediaItem{MediaKey: "gone-1", LocalPath: "/photos/pool/gone-1.jpg", SizeBytes: 388_284}
+	if err := server.store.MarkDownloaded(backedUp, now); err != nil {
+		t.Fatalf("marking the item downloaded: %v", err)
+	}
+	if err := server.store.MarkMissingUpstream("gone-1", now); err != nil {
+		t.Fatalf("marking the item missing upstream: %v", err)
+	}
+
+	body := get(handler, "/review", cookie).Body.String()
+	if !strings.Contains(body, `data-key="gone-1"`) {
+		t.Fatal("the written-off item did not reach the review page")
+	}
+	cell := body[strings.Index(body, `data-key="gone-1"`):]
+	cell = cell[:strings.Index(cell, "</figure>")]
+	if !strings.Contains(cell, "data-held") {
+		t.Error("the cell does not say it holds the file, so the viewer will show Google's thumbnail")
+	}
+	if !strings.Contains(cell, "backed up") {
+		t.Error("the cell does not carry the backed-up mark")
+	}
+}
+
 // The ticked-by-default boxes are what a browser without script has instead of Select all, so
 // the two have to arrive together: buttons that only script can honour must not be visible until
 // it has run, and the boxes must be ticked whether or not it ever does.
