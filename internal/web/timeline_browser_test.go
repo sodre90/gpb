@@ -152,6 +152,7 @@ func TestAJumpAlongTheRailLetsGoOfTheThumbnailsItLeftBehind(t *testing.T) {
 	failOnScriptErrors(t, browser)
 
 	var inDocument []string
+	var mountedImages int
 	if err := chromedp.Run(browser,
 		chromedp.Navigate(site.URL+"/album/years"),
 		chromedp.WaitVisible(".grid.timeline .grid-cell[data-key]"),
@@ -161,6 +162,7 @@ func TestAJumpAlongTheRailLetsGoOfTheThumbnailsItLeftBehind(t *testing.T) {
 		chromedp.Evaluate(dragTheRailTo(0.9), nil),
 		chromedp.Sleep(2*time.Second),
 		chromedp.Evaluate(`Array.from(document.querySelectorAll('#grid img.thumb[src]')).map((image) => image.src.split('/').pop())`, &inDocument),
+		chromedp.Evaluate(`document.querySelectorAll('#grid img.thumb').length`, &mountedImages),
 	); err != nil {
 		t.Fatalf("jumping along the rail: %v", err)
 	}
@@ -178,7 +180,11 @@ func TestAJumpAlongTheRailLetsGoOfTheThumbnailsItLeftBehind(t *testing.T) {
 			t.Errorf("Google is still being asked for %s, which is no longer on the page", key)
 		}
 	}
-	t.Logf("%d thumbnails asked for over two jumps, %d still in flight, %d on the page", asked, len(inFlight), len(inDocument))
+	// The rows mounted above and below the viewport are in the document without their pictures.
+	if mountedImages <= len(inDocument) {
+		t.Errorf("%d images are mounted and %d of them asked for; the rows beyond the viewport should still be waiting", mountedImages, len(inDocument))
+	}
+	t.Logf("%d thumbnails asked for over two jumps, %d still in flight, %d of %d mounted images asked for", asked, len(inFlight), len(inDocument), mountedImages)
 }
 
 // unhurriedThumbnails stands in for Google and never answers, so what remains in flight is

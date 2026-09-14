@@ -24,12 +24,15 @@ const thumbCacheSeconds = 30 * 24 * 60 * 60
 // settle back to it. The steady rate is what Google sees over a minute of scrolling.
 const thumbBurst = 16
 
+// thumbTurns is how many requests may hold a reservation at the bucket at once.
+const thumbTurns = 4
+
 // thumbSource hands out a gphotos client built from whatever session the auth manager
 // currently holds, rebuilding it when a warmup replaces the session. It exists because the
 // grid needs Google at request time, while the sync engine builds its client per run.
 type thumbSource struct {
-	auth    *auth.Manager
-	limiter *rate.Limiter
+	auth  *auth.Manager
+	queue *thumbQueue
 
 	mu      sync.Mutex
 	session *auth.Session
@@ -38,9 +41,39 @@ type thumbSource struct {
 
 func newThumbSource(manager *auth.Manager, requestsPerSecond float64) *thumbSource {
 	return &thumbSource{
-		auth:    manager,
-		limiter: rate.NewLimiter(rate.Limit(requestsPerSecond), thumbBurst),
+		auth:  manager,
+		queue: newThumbQueue(requestsPerSecond),
 	}
+}
+
+// thumbQueue paces thumbnail requests, letting only a few of them hold a turn at the token
+// bucket at once. A rate.Limiter hands every arrival a reservation on the spot, and a
+// cancelled reservation gives its turn back only when nobody arrived after it — so a screen
+// of images the browser let go of (a jump along the timeline's rail) would leave its seconds
+// of turns spent, and the next screen's pictures would wait behind ghosts. Eighty cancelled
+// waits cost a fresh request 7.7 s in a local experiment. A request waiting here holds no
+// reservation, so its cancellation costs nothing, and a handful of turns is enough to keep the
+// bucket drained: a turn is held only for the wait, never for the fetch.
+type thumbQueue struct {
+	limiter *rate.Limiter
+	turns   chan struct{}
+}
+
+func newThumbQueue(requestsPerSecond float64) *thumbQueue {
+	return &thumbQueue{
+		limiter: rate.NewLimiter(rate.Limit(requestsPerSecond), thumbBurst),
+		turns:   make(chan struct{}, thumbTurns),
+	}
+}
+
+func (q *thumbQueue) Wait(ctx context.Context) error {
+	select {
+	case q.turns <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-q.turns }()
+	return q.limiter.Wait(ctx)
 }
 
 // clientForSession returns a client built from the session the manager holds right now.
@@ -66,7 +99,7 @@ func (t *thumbSource) clientForSession() (*gphotos.Client, error) {
 	}
 	// Its own bucket, not the sync engine's: this traffic exists only while a human is
 	// scrolling, and throttling it to the nightly backup's pace would make the grid unusable.
-	client.Throttle(t.limiter)
+	client.Throttle(t.queue)
 
 	t.session, t.cached = session, client
 	return client, nil

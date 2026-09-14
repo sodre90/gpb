@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.2 — 2026-09-14
+
+- **A cancelled thumbnail request now gives its turn back.** 0.2.1 had the browser let go of
+  the pictures a jump along the rail left behind, and it made no difference, because the
+  rate limiter had already handed each of those requests a reservation on arrival and a
+  cancelled reservation only returns its turn when nobody arrived after it. The abandoned
+  screen still cost its seconds — by cancelling instead of by completing. Eighty cancelled
+  waits left a fresh request 7.7 s of ghosts to wait behind. Only a handful of requests may
+  now hold a reservation at once; the rest wait in a queue where cancelling costs nothing.
+- **Only the rows near the viewport ask for their pictures.** The rows mounted a screen above
+  and below, so that scrolling never shows a hole, were asking for theirs at the same moment
+  — under HTTP/2 all at once — so the screen you landed on was sharing the budget with two
+  you could not see. Those rows now wait until they are scrolled towards.
+
 ## 0.2.1 — 2026-09-14
 
 - **A jump along the rail lets go of the thumbnails it left behind.** A browser goes on

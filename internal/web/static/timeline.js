@@ -14,6 +14,7 @@
   const settleDelay = 150;
   const keptWindows = 40;
   const overscan = 1.0;
+  const nearby = 0.25;
   const labelClearance = 22;
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August",
     "September", "October", "November", "December"];
@@ -170,6 +171,7 @@
       for (let index = firstRowBelow(from); index < rows.length && rows[index].top <= to; index++) {
         wanted.add(index);
         if (!mounted.has(index) || arrived(index)) mount(index);
+        if (isNear(rows[index], viewTop)) resumeImages(mounted.get(index));
       }
       mounted.forEach((element, index) => {
         if (wanted.has(index)) return;
@@ -225,7 +227,7 @@
       element.className = "grid timeline-row";
       const cells = fetchedCells(row.first, row.count);
       if (cells) {
-        cells.forEach(resumeImage);
+        cells.forEach(parkImages);
         element.append(...cells);
       } else {
         for (let i = 0; i < row.count; i++) element.append(blankCell());
@@ -238,19 +240,28 @@
     // image after its element has left the document. Five jumps along the rail would queue five
     // screens of pictures nobody is looking at ahead of the one they are — so a row that leaves
     // the document lets go of what it was still waiting for, and asks again if it comes back.
+    // The rows mounted above and below the viewport wait the same way: only the rows near it
+    // ask for their pictures, so what is on screen is never sharing the budget with what is not.
+    function isNear(row, viewTop) {
+      return row.top + row.height >= viewTop - window.innerHeight * nearby &&
+        row.top <= viewTop + window.innerHeight * (1 + nearby);
+    }
+
     function parkImages(element) {
       element.querySelectorAll("img.thumb[src]").forEach((image) => {
-        if (image.complete) return;
+        // An image the browser was never asked for reports itself complete, so what it holds
+        // is the test, not whether it is done.
+        if (image.complete && image.naturalWidth > 0) return;
         image.dataset.src = image.getAttribute("src");
         image.removeAttribute("src");
       });
     }
 
-    function resumeImage(cell) {
-      const image = cell.querySelector("img.thumb[data-src]");
-      if (!image) return;
-      image.setAttribute("src", image.dataset.src);
-      delete image.dataset.src;
+    function resumeImages(element) {
+      element.querySelectorAll("img.thumb[data-src]").forEach((image) => {
+        image.setAttribute("src", image.dataset.src);
+        delete image.dataset.src;
+      });
     }
 
     function blankCell() {
