@@ -312,6 +312,13 @@ func inventItems(t *testing.T, db *store.Store, album invented, now time.Time) {
 			if err := db.MarkDownloaded(finished, now.Add(-time.Duration(index)*13*time.Minute)); err != nil {
 				t.Fatalf("marking an item downloaded in %s: %v", album.title, err)
 			}
+			// Read for its place, as the sweep would have by now; six in ten carry one, which
+			// is what the real library measured.
+			located := store.Location{MediaKey: key, Known: scatter(key+"/place", 10) < 6,
+				Latitude: 28.4 + float64(scatter(key+"/lat", 40))/100, Longitude: -14.0 - float64(scatter(key+"/lon", 60))/100}
+			if err := db.MarkLocated([]store.Location{located}, now); err != nil {
+				t.Fatalf("locating an item in %s: %v", album.title, err)
+			}
 		case store.StateFailed:
 			if err := db.MarkFailed(key, fmt.Errorf("the content host answered 403 three times")); err != nil {
 				t.Fatalf("failing an item in %s: %v", album.title, err)

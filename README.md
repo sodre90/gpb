@@ -63,6 +63,14 @@ moving, because each thumbnail is one request to Google and a drag across a deca
 thousands of them. Click a photo to look at it full size, from the file on disk; the arrow keys
 step through the whole library from there.
 
+Type a place into the box above the grid — a town, an island, a country — and the grid is
+narrowed to the photos taken there. Where a photo was taken is read once out of the backed-up
+file itself, from the GPS tag a phone writes, so this works for everything on disk and needs
+nothing from Google; about six in ten of the JPEGs in the library this was built against carry
+one, and nearly every HEIC. The name is turned into an area by one query to OpenStreetMap, the
+only server gpb talks to besides Google, and the name is all it is sent. Set `lookup_url` under
+`[places]` to a Nominatim of your own, or to nothing to have no search at all.
+
 ## Watching it work
 
 ![The activity page: the run in flight above, the history below](docs/runs.png)

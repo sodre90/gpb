@@ -63,7 +63,7 @@ type cellsFragment struct {
 // handlePhotoCells serves a window of the whole-library grid.
 func (s *Server) handlePhotoCells(w http.ResponseWriter, r *http.Request) {
 	offset, limit := cellsWindow(r)
-	items, err := s.store.EveryItemPage(offset, limit)
+	items, err := s.store.EveryItemPage(s.rememberedWhere(placeQuery(r)), offset, limit)
 	if err != nil {
 		log.Printf("web: reading a window of the photo grid: %v", err)
 		http.Error(w, "the photos are unavailable", http.StatusInternalServerError)

@@ -294,7 +294,7 @@
     function fetchWindow(number) {
       if (windows.has(number)) return windows.get(number).promise;
       const offset = number * windowSize;
-      const promise = fetch(`${cellsURL}?offset=${offset}&limit=${windowSize}`)
+      const promise = fetch(windowURL(offset))
         .then((response) => {
           if (response.status === 401) return window.gpb.signInAgain(), [];
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -311,6 +311,15 @@
         });
       windows.set(number, { promise, cells: null, number });
       return promise;
+    }
+
+    // The cells URL may already carry a query — the place the grid is narrowed to — so the
+    // window is added to it rather than appended after a second question mark.
+    function windowURL(offset) {
+      const url = new URL(cellsURL, location.href);
+      url.searchParams.set("offset", offset);
+      url.searchParams.set("limit", windowSize);
+      return url.pathname + url.search;
     }
 
     function parseCells(html) {

@@ -46,6 +46,7 @@ var components = map[string]string{
 	"mode-form":     "the backup-mode selector on a row or an album",
 	"outcome":       "how a run ended",
 	"pager":         "older and newer, under a grid",
+	"place":         "the search on the Photos page: a name typed, a box on the map found",
 	"progress":      "a row of the Now card: what is being fetched and how far it has got",
 	"rail":          "the years down the window's edge and the drag along them, built by timeline.js",
 	"runs":          "the activity table",

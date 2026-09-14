@@ -1063,14 +1063,20 @@ func permissionAlbum(albumID string) string {
 }
 
 func (s *Syncer) recordSuccess(item store.MediaItem, result downloaded) error {
-	return s.store.MarkDownloaded(store.MediaItem{
+	landed := store.MediaItem{
 		MediaKey:  item.MediaKey,
 		Filename:  result.Filename,
 		LocalPath: result.Path,
 		SizeBytes: result.Size,
 		SHA256:    result.SHA256,
 		MimeType:  result.ContentType,
-	}, time.Now())
+	}
+	if err := s.store.MarkDownloaded(landed, time.Now()); err != nil {
+		return err
+	}
+	// The place is read while the file is still in the page cache; the sweep would get to it
+	// eventually, but a photo from today's trip should be findable tonight.
+	return LocateOne(s.store, landed)
 }
 
 // recordFailure returns the original cause, not the bookkeeping error: the caller needs to

@@ -20,11 +20,12 @@ func (s *Store) AlbumPage(albumID string, offset, limit int) ([]MediaItem, error
 // question no album can: an album page shows what one album holds, and half this library is in
 // no album at all. Newest first because someone browsing everything is looking for something
 // recent far more often than for something from 2009.
-func (s *Store) EveryItemPage(offset, limit int) ([]MediaItem, error) {
+func (s *Store) EveryItemPage(where Where, offset, limit int) ([]MediaItem, error) {
+	clause, bound := where.clause()
 	return s.queryItems(`
-		SELECT `+itemColumns+` FROM media_items
+		SELECT `+itemColumns+` FROM media_items`+clause+`
 		ORDER BY captured_at DESC, media_key
-		LIMIT ? OFFSET ?`, limit, offset)
+		LIMIT ? OFFSET ?`, append(bound, limit, offset)...)
 }
 
 // MonthCount is how many of a grid's items were captured in one month, in the grid's own order.
@@ -41,10 +42,11 @@ type MonthCount struct {
 //
 // The undated bucket lands where the item order puts undated items — last here, where the order
 // is descending, and first in an album — so the two never disagree about where a cell is.
-func (s *Store) EveryItemMonths() ([]MonthCount, error) {
+func (s *Store) EveryItemMonths(where Where) ([]MonthCount, error) {
+	clause, bound := where.clause()
 	return s.queryMonths(`
-		SELECT ` + captureMonth + ` AS month, COUNT(*) FROM media_items
-		GROUP BY month ORDER BY month DESC`)
+		SELECT `+captureMonth+` AS month, COUNT(*) FROM media_items`+clause+`
+		GROUP BY month ORDER BY month DESC`, bound...)
 }
 
 // AlbumMonths is one album folded the same way, oldest first, to match AlbumPage.
@@ -80,9 +82,10 @@ func (s *Store) queryMonths(query string, arguments ...any) ([]MonthCount, error
 	return months, rows.Err()
 }
 
-func (s *Store) EveryItemCount() (int, error) {
+func (s *Store) EveryItemCount(where Where) (int, error) {
+	clause, bound := where.clause()
 	var count int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM media_items`).Scan(&count); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM media_items`+clause, bound...).Scan(&count); err != nil {
 		return 0, fmt.Errorf("counting every item: %w", err)
 	}
 	return count, nil

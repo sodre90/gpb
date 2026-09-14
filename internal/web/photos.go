@@ -3,6 +3,9 @@ package web
 import (
 	"log"
 	"net/http"
+	"net/url"
+
+	"gpb/internal/store"
 )
 
 // photosView is every photo the account has, in one place. The album pages answer "what is in
@@ -21,10 +24,19 @@ type photosView struct {
 	NextPage int
 	BackedUp int
 	Timeline timeline
+	Search   placeSearch
+	// Located is how far the sweep reading each file for its place has got. Until it has
+	// finished, a search is over part of the library, and the page has to say so.
+	Located store.LocationProgress
 }
 
 func (s *Server) handlePhotos(w http.ResponseWriter, r *http.Request) {
-	view, err := s.photosView(pageNumber(r))
+	search, where := s.searchFor(r.Context(), placeQuery(r))
+	view, err := s.photosView(pageNumber(r), search, where)
+	if err == nil && search.Query != "" && !search.Found() {
+		// A name that found nothing narrows the grid to nothing, not to everything.
+		view = photosView{Search: search, Located: view.Located}
+	}
 	if err != nil {
 		log.Printf("web: building the photo grid: %v", err)
 		http.Error(w, "the photos are unavailable", http.StatusInternalServerError)
@@ -36,8 +48,8 @@ func (s *Server) handlePhotos(w http.ResponseWriter, r *http.Request) {
 	render(w, http.StatusOK, "photos", data)
 }
 
-func (s *Server) photosView(page int) (photosView, error) {
-	total, err := s.store.EveryItemCount()
+func (s *Server) photosView(page int, search placeSearch, where store.Where) (photosView, error) {
+	total, err := s.store.EveryItemCount(where)
 	if err != nil {
 		return photosView{}, err
 	}
@@ -45,7 +57,7 @@ func (s *Server) photosView(page int) (photosView, error) {
 	pages := pagesFor(total)
 	page = min(max(page, 1), pages)
 
-	items, err := s.store.EveryItemPage((page-1)*pageSize, pageSize)
+	items, err := s.store.EveryItemPage(where, (page-1)*pageSize, pageSize)
 	if err != nil {
 		return photosView{}, err
 	}
@@ -54,11 +66,15 @@ func (s *Server) photosView(page int) (photosView, error) {
 	if err != nil {
 		return photosView{}, err
 	}
-	months, err := s.store.EveryItemMonths()
+	months, err := s.store.EveryItemMonths(where)
 	if err != nil {
 		return photosView{}, err
 	}
-	timeline, err := timelineFor("/photos/cells", months, total, page)
+	timeline, err := timelineFor(cellsURLFor(search), months, total, page)
+	if err != nil {
+		return photosView{}, err
+	}
+	located, err := s.store.LocationProgress()
 	if err != nil {
 		return photosView{}, err
 	}
@@ -68,9 +84,20 @@ func (s *Server) photosView(page int) (photosView, error) {
 		Page: page, Pages: pages, PrevPage: page - 1, NextPage: page + 1,
 		Items:    make([]itemCell, 0, len(items)),
 		Timeline: timeline,
+		Search:   search,
+		Located:  located,
 	}
 	for _, item := range items {
 		view.Items = append(view.Items, cellFor(item, false))
 	}
 	return view, nil
+}
+
+// cellsURLFor is where the timeline fetches its windows from: the same grid, narrowed the same
+// way, or the fetched cells would show the whole library under a heading naming one place.
+func cellsURLFor(search placeSearch) string {
+	if !search.Found() {
+		return "/photos/cells"
+	}
+	return "/photos/cells?place=" + url.QueryEscape(search.Query)
 }

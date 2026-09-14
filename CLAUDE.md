@@ -13,7 +13,7 @@ is written down there with the measurement that produced it.
 
 ```bash
 go build ./...
-go test ./...              # 510 tests across 13 packages
+go test ./...              # 534 tests across 15 packages
 cd spike && go test ./...  # the Phase 0 protocol spike, a separate module
 ```
 
@@ -47,6 +47,8 @@ internal/syncer/         the backup run itself — listing, download, resume, re
 internal/engine/         assembling a run: warm the profile, harvest the session, wire the syncer
 internal/links/          <photos>/albums/, the symlink view of the pool
 internal/thumbs/         thumbnail fetch and disk cache
+internal/geo/            where a file says it was taken, read from its own metadata
+internal/places/         a place name to a box on the map, via a Nominatim server
 internal/web/            every page, its templates and its stylesheet
 internal/homeassistant/  the MQTT bridge and its discovery messages
 internal/daemon/         scheduler, keepalive, notify hook, wiring

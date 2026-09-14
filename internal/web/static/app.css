@@ -569,6 +569,25 @@ table.albums td.albums-star {
   align-items: center;
 }
 
+/* ---- place: the search on the Photos page, a name typed and a box on the map found ---- */
+
+.place {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: var(--s-3);
+}
+
+.place input {
+  flex: 1 1 12rem;
+  max-width: 24rem;
+}
+
+.place a {
+  font-size: var(--t-small);
+}
+
 .albums-favourites {
   padding: var(--s-2) var(--s-3);
   border: 1px solid var(--line);

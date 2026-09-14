@@ -1,9 +1,15 @@
+{{define "located-so-far"}}
+{{if and (gt .OnDisk 0) (not .Finished)}}
+  Where each photo was taken is still being read from the files: {{count .Read}} of {{count .OnDisk}} so far, {{count .Located}} with a place.
+{{end}}
+{{end}}
+
 {{define "pager"}}
 {{if gt .Pages 1}}
 <nav class="pager" aria-label="Grid pages">
-  {{if gt .Page 1}}<a href="/photos?page={{.PrevPage}}">← Newer page</a>{{end}}
+  {{if gt .Page 1}}<a href="/photos?page={{.PrevPage}}{{if .Search.Query}}&place={{.Search.Query}}{{end}}">← Newer page</a>{{end}}
   <span class="muted">Page {{.Page}} of {{.Pages}}</span>
-  {{if lt .Page .Pages}}<a href="/photos?page={{.NextPage}}">Older page →</a>{{end}}
+  {{if lt .Page .Pages}}<a href="/photos?page={{.NextPage}}{{if .Search.Query}}&place={{.Search.Query}}{{end}}">Older page →</a>{{end}}
 </nav>
 {{end}}
 {{end}}
@@ -11,18 +17,49 @@
 {{define "content"}}
 {{with .Data}}
 
-{{if .Items}}
+{{if .Search.Offered}}
+<form class="place" method="get" action="/photos" role="search">
+  <label for="place">Where</label>
+  <input type="search" id="place" name="place" value="{{.Search.Query}}" placeholder="a town, an island, a country" autocomplete="off">
+  <button type="submit">Find</button>
+  {{if .Search.Query}}<a href="/photos">Everything</a>{{end}}
+</form>
+{{end}}
+
+{{if .Search.Query}}
+  {{if .Search.Unavailable}}
+  <p class="banner bad">The place could not be looked up just now — the lookup server did not answer.
+    Nothing was remembered, so trying again asks it again.</p>
+  {{else if not .Search.Known}}
+  <p class="muted">OpenStreetMap knows no place called “{{.Search.Query}}”.
+    Try the name in its own language, or a larger place it is part of.</p>
+  {{else}}
+  <p class="muted">
+    {{quantity .Total "photo"}} in <strong>{{.Search.Name}}</strong>
+    · {{count .Located.Located}} of {{count .Located.OnDisk}} backed-up files say where they were taken.
+    {{template "located-so-far" .Located}}
+  </p>
+  {{end}}
+{{else if .Items}}
 <p class="muted">
   {{quantity .Total "item"}} · {{count .BackedUp}} backed up · newest first.
   Click a photo to look at it.
+  {{template "located-so-far" .Located}}
 </p>
+{{end}}
 
+{{if .Items}}
 {{template "pager" .}}
 <div class="grid" id="grid" {{template "timeline-data" .Timeline}}>
   {{range .Items}}{{template "gridcell" .Shown}}{{end}}
 </div>
 {{template "pager" .}}
-{{else}}
+{{else if and .Search.Query .Search.Known}}
+<section class="empty">
+  <p>No photo read so far was taken in {{.Search.Name}}.</p>
+  <p><a href="/photos">Back to everything</a></p>
+</section>
+{{else if not .Search.Query}}
 <section class="empty">
   <p>Nothing has been listed yet. Photos turn up here once a run has walked the account.</p>
   <p><a href="/">Back to the overview</a></p>

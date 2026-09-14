@@ -560,6 +560,7 @@ shadows are the first thing to look wrong across light/dark). Radius: 8px cards,
 | **Pager** | grid top and bottom, for a browser without script; the script removes it |
 | **Timeline** | a grid page with script: rows placed by measurement, month headings, the floating month; §3.9 |
 | **Rail** | the years down the window's edge, the mark, the label under the pointer; §3.9 |
+| **Place** | the search above the Photos grid: a name typed, the full name of what matched shown beside the count, and a plain sentence while the files are still being read |
 | **Disclosure** | bundles section (URL-driven link, as today — the reasoning in `albumsort.go:169–181` stands); `<details>` for Google diagnostics, where nothing inside reloads the page |
 
 ## 5. Interaction and feedback model

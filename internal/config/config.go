@@ -31,6 +31,7 @@ type Config struct {
 	Schedule  Schedule `toml:"schedule"`
 	Limits    Limits   `toml:"limits"`
 	Thumbs    Thumbs   `toml:"thumbs"`
+	Places    Places   `toml:"places"`
 	Notify    Notify   `toml:"notify"`
 	MQTT      MQTT     `toml:"mqtt"`
 
@@ -113,6 +114,13 @@ type Limits struct {
 type Thumbs struct {
 	CacheMaxBytes     int64   `toml:"cache_max_bytes"`
 	RequestsPerSecond float64 `toml:"requests_per_second"`
+}
+
+// Places is where a name typed into the Photos page's search is turned into a box on the map.
+// It is the one server this program talks to that is not Google, and what it is sent is the
+// name and nothing else. An empty URL turns the search off.
+type Places struct {
+	LookupURL string `toml:"lookup_url"`
 }
 
 type Notify struct {
@@ -295,6 +303,9 @@ func Defaults() Config {
 		Thumbs: Thumbs{
 			CacheMaxBytes:     1 << 30,
 			RequestsPerSecond: 8.0,
+		},
+		Places: Places{
+			LookupURL: "https://nominatim.openstreetmap.org/search",
 		},
 		MQTT: MQTT{
 			// No default broker: a guess would either fail to connect or, worse, connect to

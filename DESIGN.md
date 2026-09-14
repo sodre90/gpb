@@ -946,6 +946,47 @@ session cookies. So:
   unbrowsed albums during sync runs — that would multiply automated request volume for
   speculative benefit.
 
+## 11a. Where a photo was taken (added 2026-09-14)
+
+*Built.* Google's listing says nothing about place — key, thumbnail, size, capture time, video
+flag, and that is all — so a search by place has two possible sources: Google's own search
+endpoint, driven the way the listings are, or the files in the pool, which carry their GPS tags
+untouched (§8). The pool was chosen. It is independent of Google, it covers files Google has
+since dropped, and it needs no further protocol discovery; what it misses is any photo without
+a GPS tag, and any place Google inferred rather than read. **Measured 2026-09-14 on the
+deployed pool** (a sample of 400 per type, counts only): 99% of HEICs carry a place, 59% of
+JPEGs (2008: none; 2013: a fifth; 2017 on: most), 41% of MP4s, none of the PNGs, GIFs and
+WebPs. Nothing was unreadable.
+
+`internal/geo` reads the coordinates out of a file's own structure, stdlib only: a JPEG's APP1
+segment, a TIFF or DNG's IFDs, the Exif item a HEIC names in its `iinf` and locates with its
+`iloc`, the ISO 6709 string a movie keeps as `©xyz` under `udta` or under the QuickTime keys,
+the `EXIF` chunk of a WebP, the `eXIf` chunk of a PNG. It reads headers and seeks past bodies,
+because a movie's index sits behind its frames. A location of 0°,0° is read as none: that is
+what a phone with its GPS off writes. A file that carries nothing usable is recorded as read
+with no place, which is a different fact from a file nobody has read yet (`located_at`).
+
+Every backed-up file is read once. A new download is read as it lands, while it is still in
+the page cache. The library that was already there is read by a sweep the daemon runs from
+its start, one file at a time on one goroutine, in batches of 500 between commits, because the
+reading is disk-bound — on the box's cold disk around a tenth of a second a file, so the first
+sweep over 96,000 files takes hours — and it shares the disk with the nightly run. Until it
+has finished, the Photos page says how far it has got, because a search over part of the
+library looks exactly like a search that does not work.
+
+A name typed into the Photos page is turned into a box on the map by one query to a Nominatim
+server, OpenStreetMap's public one by default (`[places] lookup_url`). It is the one server
+this program talks to that is not Google, and what it is sent is the name that was typed and
+nothing else — no coordinate, no photo, no account; the public server's policy of one request a
+second and an identifying agent is kept. The answer is remembered in the `places` table, found
+or not, so a name is asked once. An empty URL turns the search off and the page offers none.
+The grid, its timeline and the viewer are then all narrowed by the same box: the timeline's
+windows are fetched from `/photos/cells?place=…`, which reads the remembered box and asks nobody.
+
+The first match is taken and its full name shown, so a wrong first match is visible rather
+than a mystery. Choosing among several, a search on album pages, and a box that crosses the
+antimeridian were left out.
+
 ## 12. Configuration
 
 One file, `/data/config.toml` (BurntSushi/toml), created with defaults on first run.
@@ -978,6 +1019,9 @@ min_free_bytes      = 8589934592   # 8 GiB; a run stops rather than eat into it,
 [thumbs]
 cache_max_bytes     = 1073741824   # 1 GiB
 requests_per_second = 8.0
+
+[places]
+lookup_url = "https://nominatim.openstreetmap.org/search"   # a name → a box on the map; empty = no search
 
 [notify]
 command = ""   # e.g. "/data/hooks/notify.sh"; argv: <event> <message>
@@ -1427,6 +1471,8 @@ gpb/
   internal/engine/         assembling a run: warm the profile, harvest the session, wire it up
   internal/links/          the album symlink view of the pool (§8)
   internal/thumbs/         thumbnail cache, fetch orchestration, eviction
+  internal/geo/            where a file says it was taken: Exif GPS, HEIC items, movie strings
+  internal/places/         a name to a box on the map, by way of a Nominatim server
   internal/web/            handlers, session/CSRF/rate-limit middleware, TLS, templates/,
                            static/ (embed.FS), noVNC proxy
   internal/daemon/         schedule loop, canary, health state, notify hook

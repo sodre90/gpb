@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 — 2026-09-14
+
+- **Find photos by place.** Type a town, an island or a country into the box above the Photos
+  grid and the grid, its timeline and the viewer are narrowed to the photos taken there. Where a
+  photo was taken is read once out of the backed-up file itself — the GPS tag a phone writes
+  into a JPEG, a HEIC, an MP4 or a QuickTime movie — so it works for everything on disk and asks
+  Google for nothing. Six in ten of the JPEGs in the library this was built against carry one,
+  nearly every HEIC, four in ten of the videos; a phone with its location off wrote nothing, and
+  those photos are not found this way. The name is turned into an area by one query to
+  OpenStreetMap, the only server gpb talks to besides Google, sent the name and nothing else;
+  the answer is remembered so a name is asked once. `lookup_url` under `[places]` points it at a
+  Nominatim of your own, or at nothing to have no search.
+- **The files are read by a sweep that starts with the daemon**, one at a time, because on a
+  cold disk each is a tenth of a second and there are a hundred thousand of them: the first
+  sweep takes hours, the page says how far it has got until it is done, and a photo downloaded
+  tonight is read as it lands. The database gained the two coordinates and the date each file
+  was read, and a table of the places asked about.
+
 ## 0.2.4 — 2026-09-14
 
 - **A smaller re-encode of a photo still there is a copy too.** 0.2.3 left a write-off out of

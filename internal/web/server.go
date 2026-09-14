@@ -92,6 +92,9 @@ type Server struct {
 	// images is an interface rather than the concrete *thumbSource so a test can exercise the
 	// whole serving path — store row, cache, headers — without a Google session.
 	images thumbs.Fetcher
+	// places turns a name into a box on the map; nil when no lookup is configured, and then
+	// the Photos page offers no search.
+	places PlaceFinder
 
 	// wait is time.Sleep under another name, so a test can watch the delay being charged rather
 	// than time it against a clock that also counts the password hashing it cannot control.
@@ -125,6 +128,7 @@ func NewServer(deps Deps) *Server {
 		live:      newHub(),
 		thumbs:    thumbs.NewCache(deps.Config.ThumbCacheDir(), deps.Config.Thumbs.CacheMaxBytes),
 		images:    newThumbSource(deps.Auth, deps.Config.Thumbs.RequestsPerSecond),
+		places:    placeFinderFor(deps.Config.Places.LookupURL),
 		wait:      time.Sleep,
 		stop:      stopTheProcess,
 		freeBytes: syncer.FreeBytes,

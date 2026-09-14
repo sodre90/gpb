@@ -42,7 +42,7 @@ func TestMonthsFoldOnTheCaptionsClock(t *testing.T) {
 		"mid-august": time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC),
 	})
 
-	months, err := store.EveryItemMonths()
+	months, err := store.EveryItemMonths(Where{})
 	if err != nil {
 		t.Fatalf("folding by month: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestMonthsFollowEachGridsOrderIncludingUndatedItems(t *testing.T) {
 		"undated": {},
 	})
 
-	library, err := store.EveryItemMonths()
+	library, err := store.EveryItemMonths(Where{})
 	if err != nil {
 		t.Fatalf("folding the library: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestMonthsFollowEachGridsOrderIncludingUndatedItems(t *testing.T) {
 	if !reflect.DeepEqual(library, wantLibrary) {
 		t.Errorf("the library folded to %+v, want %+v", library, wantLibrary)
 	}
-	page, err := store.EveryItemPage(0, 10)
+	page, err := store.EveryItemPage(Where{}, 0, 10)
 	if err != nil {
 		t.Fatalf("paging the library: %v", err)
 	}

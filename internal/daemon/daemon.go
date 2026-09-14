@@ -94,6 +94,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	go d.keepalive(ctx)
 	go d.backUpOnSchedule(ctx)
 	go d.copyDatabaseOnSchedule(ctx)
+	go d.locateFiles(ctx)
 	go d.bridge.Run(ctx)
 
 	log.Printf("daemon: web UI on %s over %s", d.cfg.Web.Listen, d.cfg.Web.TLS.Scheme())
