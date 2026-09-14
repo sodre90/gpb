@@ -515,7 +515,7 @@ func TestUnfollowedAlbumsAreListedButNotDownloaded(t *testing.T) {
 }
 
 func TestVanishedItemsAreMarkedByARun(t *testing.T) {
-	h := newHarness(t, store.SyncAll, map[string]string{"key-a": "bytes", "key-b": "bytes"})
+	h := newHarness(t, store.SyncAll, map[string]string{"key-a": "photo a bytes", "key-b": "photo b bytes"})
 
 	if _, err := h.syncer.Run(t.Context()); err != nil {
 		t.Fatalf("first run: %v", err)

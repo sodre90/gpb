@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.3 — 2026-09-14
+
+- **A photo written off while an identical copy of it is still there is no longer put up for
+  review.** Google drops items whose bytes it already holds under another key — a phone
+  re-uploading an old folder does it — and each one was reported as a photo Google had lost.
+  In this library, 85 of the 300 written off in the first month were byte-for-byte copies of
+  photos still on Google and still backed up; a reader checking one found the photo exactly
+  where it had always been. Losing one of two identical files is not a loss. The write-off
+  itself is unchanged — the file stays, the state and the date it went are recorded — it is
+  only not asked about, and the run's log says how many of the items gone were copies. A copy
+  that differs at all, even a smaller re-encode of the same shot, still goes to review. The
+  77 already waiting are cleared on the first start.
+
 ## 0.2.2 — 2026-09-14
 
 - **A cancelled thumbnail request now gives its turn back.** 0.2.1 had the browser let go of

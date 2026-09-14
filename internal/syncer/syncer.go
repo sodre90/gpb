@@ -590,8 +590,8 @@ func (s *Syncer) reconcileLibrary(listed int, capturedFrom, listedAt time.Time) 
 		return err
 	}
 	if departed.LeftTheAlbum > 0 {
-		log.Printf("syncer: %d items left the library, %d of them gone from Google",
-			departed.LeftTheAlbum, departed.GoneFromGoogle)
+		log.Printf("syncer: %d items left the library, %d of them gone from Google%s",
+			departed.LeftTheAlbum, departed.GoneFromGoogle, copiesNote(departed))
 	}
 	return nil
 }
@@ -690,11 +690,20 @@ func (s *Syncer) listAlbum(ctx context.Context, albumID string) (int, error) {
 		return listed, err
 	}
 	if departed.LeftTheAlbum > 0 {
-		log.Printf("syncer: %d items left an album, %d of them gone from Google",
-			departed.LeftTheAlbum, departed.GoneFromGoogle)
+		log.Printf("syncer: %d items left an album, %d of them gone from Google%s",
+			departed.LeftTheAlbum, departed.GoneFromGoogle, copiesNote(departed))
 	}
 
 	return listed, s.store.MarkAlbumSynced(albumID, listedAt)
+}
+
+// copiesNote says how many of the items written off were byte-identical copies of photos
+// Google still has, which the review queue is not asked about.
+func copiesNote(departed store.Departures) string {
+	if departed.Copies == 0 {
+		return ""
+	}
+	return fmt.Sprintf(", %d of those identical copies of photos still there", departed.Copies)
 }
 
 // describeAlbum names a failing album in the terms that tell its failures apart. The id alone

@@ -247,6 +247,41 @@ func TestASuccessfulDownloadClearsTheFailureHistory(t *testing.T) {
 	}
 }
 
+// Google drops an item whose bytes it already holds under another key. Losing one of two
+// identical files is not a loss, so that write-off is not put up for review; a copy that
+// differs at all — a smaller re-encode of the same shot — still is.
+func TestAWrittenOffCopyOfAPhotoStillThereIsNotPutUpForReview(t *testing.T) {
+	store := openTestStore(t)
+	albumID := seedFollowedAlbum(t, store, SyncAll, "kept", "identical", "re-encoded", "never-fetched")
+	for key, sha := range map[string]string{"kept": "abc", "identical": "abc", "re-encoded": "def"} {
+		if err := store.MarkDownloaded(MediaItem{MediaKey: key, Filename: key + ".jpg", LocalPath: "/pool/" + key, SHA256: sha}, noon); err != nil {
+			t.Fatalf("marking %s downloaded: %v", key, err)
+		}
+	}
+
+	later := noon.Add(24 * time.Hour)
+	if err := store.LinkItemToAlbum(albumID, "kept", later); err != nil {
+		t.Fatalf("re-listing the surviving item: %v", err)
+	}
+	departed, err := store.ReconcileAlbum(albumID, later)
+	if err != nil {
+		t.Fatalf("reconciling the album: %v", err)
+	}
+	if departed != (Departures{LeftTheAlbum: 3, GoneFromGoogle: 3, Copies: 1}) {
+		t.Errorf("the reconcile reports %+v, want three gone of which one a copy", departed)
+	}
+
+	for key, wantReview := range map[string]bool{"identical": false, "re-encoded": true, "never-fetched": true} {
+		item, err := store.Item(key)
+		if err != nil {
+			t.Fatalf("reading %s: %v", key, err)
+		}
+		if item.State != StateMissingUpstream || item.NeedsReview != wantReview {
+			t.Errorf("%s is %q, review=%v, want missing and review=%v", key, item.State, item.NeedsReview, wantReview)
+		}
+	}
+}
+
 func TestVanishedItemsAreFoundAndNeverDeleted(t *testing.T) {
 	store := openTestStore(t)
 	albumID := seedFollowedAlbum(t, store, SyncAll, "item-1", "item-2")

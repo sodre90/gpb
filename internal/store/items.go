@@ -223,6 +223,16 @@ func (s *Store) MarkFailed(mediaKey string, cause error) error {
 	return requireOneRow(result, "media item", mediaKey)
 }
 
+// reviewUnlessACopyRemains is the review flag for an item being written off. Google drops
+// items whose bytes it already holds under another key — a library of 96,000 had 300 written
+// off in its first month, and 85 of those were byte-for-byte copies of photos still there
+// and still backed up. Losing one of two identical files is not a loss, so those are not
+// asked about; a copy that differs at all, even a smaller re-encode of the same shot, is.
+const reviewUnlessACopyRemains = `CASE WHEN media_items.sha256 IS NOT NULL AND EXISTS (
+	SELECT 1 FROM media_items copy
+	WHERE copy.sha256 = media_items.sha256 AND copy.media_key != media_items.media_key
+	  AND copy.state = 'done') THEN 0 ELSE 1 END`
+
 // MarkMissingUpstream flags an item that has vanished from Google. It never deletes: a
 // backup whose contents disappear because the source did is not a backup, so the local file
 // stays and the item surfaces for review.
@@ -231,7 +241,7 @@ func (s *Store) MarkFailed(mediaKey string, cause error) error {
 // which an item was first noticed gone.
 func (s *Store) MarkMissingUpstream(mediaKey string, at time.Time) error {
 	if _, err := s.db.Exec(`
-		UPDATE media_items SET state = ?, missing_since = ?, needs_review = 1
+		UPDATE media_items SET state = ?, missing_since = ?, needs_review = `+reviewUnlessACopyRemains+`
 		WHERE media_key = ? AND missing_since IS NULL`,
 		string(StateMissingUpstream), formatTime(at), mediaKey); err != nil {
 		return fmt.Errorf("marking the item missing: %w", err)
@@ -241,10 +251,13 @@ func (s *Store) MarkMissingUpstream(mediaKey string, at time.Time) error {
 
 // Departures is what a completed album listing found had left it, split by how much it
 // proves. GoneFromGoogle counts a subset of LeftTheAlbum, and is usually zero: a photo taken
-// out of one album is still in the library and in every other album that holds it.
+// out of one album is still in the library and in every other album that holds it. Copies
+// counts the subset of those whose bytes are still held under another key, which the review
+// queue is not asked about.
 type Departures struct {
 	LeftTheAlbum   int
 	GoneFromGoogle int
+	Copies         int
 }
 
 // ReconcileAlbum records what a complete listing of one album implies about the items it no
@@ -293,7 +306,7 @@ func (s *Store) reconcile(albumID string, listedAt, capturedFrom time.Time) (Dep
 	defer tx.Rollback()
 
 	gone, err := tx.Exec(`
-		UPDATE media_items SET state = ?, missing_since = ?, needs_review = 1
+		UPDATE media_items SET state = ?, missing_since = ?, needs_review = `+reviewUnlessACopyRemains+`
 		WHERE missing_since IS NULL
 		  AND media_key IN (
 				SELECT media_key FROM album_items WHERE album_id = ? AND last_seen_at < ?)
@@ -314,11 +327,17 @@ func (s *Store) reconcile(albumID string, listedAt, capturedFrom time.Time) (Dep
 		return Departures{}, fmt.Errorf("removing items from an album: %w", err)
 	}
 
+	var copies int
+	if err := tx.QueryRow(`
+		SELECT COUNT(*) FROM media_items WHERE missing_since = ? AND needs_review = 0`, listed).Scan(&copies); err != nil {
+		return Departures{}, fmt.Errorf("counting the copies written off: %w", err)
+	}
+
 	if err := tx.Commit(); err != nil {
 		return Departures{}, fmt.Errorf("reconciling an album: %w", err)
 	}
 	writtenOff := rowsAffected(gone)
-	return Departures{LeftTheAlbum: rowsAffected(left) + writtenOff, GoneFromGoogle: writtenOff}, nil
+	return Departures{LeftTheAlbum: rowsAffected(left) + writtenOff, GoneFromGoogle: writtenOff, Copies: copies}, nil
 }
 
 // vouchedWindow narrows a reconciliation to the captures its listing saw all of, as a clause for
