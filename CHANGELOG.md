@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6 — 2026-09-14
+
+- **The grid's expand button no longer covers a photo's status marks.** Both lived in the
+  cell's top-right corner, so hovering a photo that was gone from Google or waiting for review
+  hid its own † and ? behind the ⤢. The button now sits in the picture's bottom-right, the one
+  corner nothing else uses — the tick has the top-left and the caption the space below.
+
 ## 0.1.5 — 2026-09-14
 
 - **A photo Google has lost now opens from its own file.** The review page said those photos

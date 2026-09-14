@@ -16,7 +16,7 @@
 
 services:
   gpb:
-    image: sodre90/gpb:0.1.5
+    image: sodre90/gpb:0.1.6
     # Would rather build it yourself? Uncomment, and `docker compose up -d --build`.
     # build: .
     container_name: gpb
