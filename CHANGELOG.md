@@ -10,9 +10,12 @@
   backup and were gone again within days, and what Google was doing there is not known. A
   write-off with the same file name and the same capture second as a photo still there, where
   the copy that stayed is at least as large, is now a copy as well — 60 more in this library,
-  and in every one of them the larger file was the one that stayed. The day the larger one
-  goes and the smaller survives is still a question, and stays one. The 60 already waiting are
-  cleared on the first start.
+  and in every one of them the larger file was the one Google kept. Nothing is deleted by any
+  of this: the larger copy is on Google and on disk exactly where it was, and the smaller one
+  stays on disk as well, written off but never removed. The one case still put up for review
+  is the opposite one — Google dropping the larger copy and keeping the smaller — because then
+  the best copy of the photo exists only in the backup, which is worth knowing rather than
+  having waved through. The 60 already waiting are cleared on the first start.
 
 ## 0.2.3 — 2026-09-14
 
