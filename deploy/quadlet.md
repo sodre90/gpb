@@ -170,6 +170,7 @@ journalctl --user -u gpb -f                        # what it is doing
 podman exec systemd-gpb gpb version                # which release is running
 podman exec systemd-gpb gpb status                 # what the Google session is doing
 podman exec systemd-gpb gpb verify                 # re-read the backed-up files, check every hash
+podman exec systemd-gpb gpb duplicates             # written-off files that are copies of photos still backed up
 podman auto-update && systemctl --user restart gpb # update (the unit carries AutoUpdate=registry)
 ```
 

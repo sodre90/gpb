@@ -57,12 +57,12 @@ func TestASweepReadsEachFileOnceAndLeavesTheUnreadableForLater(t *testing.T) {
 		}
 	}
 
-	read, err := LocateBatch(t.Context(), db)
+	recorded, err := LocateBatch(t.Context(), db)
 	if err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
-	if read != 3 {
-		t.Errorf("the sweep read %d files, want all 3 offered", read)
+	if recorded != 2 {
+		t.Errorf("the sweep recorded %d files, want the 2 it could open", recorded)
 	}
 	progress, _ := db.LocationProgress()
 	if progress.Read != 2 || progress.Located != 1 {
@@ -77,5 +77,11 @@ func TestASweepReadsEachFileOnceAndLeavesTheUnreadableForLater(t *testing.T) {
 	waiting, _ := db.Unlocated(10)
 	if len(waiting) != 1 || waiting[0].MediaKey != "missing" {
 		t.Errorf("%v still wait, want only the file that could not be opened", waiting)
+	}
+
+	// With only the unopenable file left, a sweep records nothing — which is what tells the
+	// daemon to stop for now rather than go round again at once.
+	if recorded, err := LocateBatch(t.Context(), db); err != nil || recorded != 0 {
+		t.Errorf("a sweep over one unopenable file recorded %d (err %v), want 0", recorded, err)
 	}
 }

@@ -112,6 +112,7 @@ gpb follow   set an album's sync mode (all | picked); gpb unfollow clears it
 gpb links    rebuild the album symlink view (§8) from the store, without touching Google
 gpb status   session health, last runs, pending counts; --healthcheck for the container
 gpb verify   re-hash downloaded files against the store; --repair queues the bad ones again
+gpb duplicates  list written-off files that are copies of photos still backed up; --delete removes them
 gpb passwd   set/replace the web UI password (writes an argon2id hash into config)
 gpb version  the release this binary was built from
 ```
@@ -205,7 +206,7 @@ snapshot of item ids. Concretely, in SQLite:
 |---|---|---|
 | New item appears | Downloaded next run | Recorded, marked `needs_review`, **not** downloaded; surfaced as a badge in the web UI, on the review queue page, and in the sync summary notification |
 | Item removed from this album | Local file kept forever; the membership goes, so it leaves this album's symlink view and, unless another followed album holds it, the sync set | Same |
-| Item removed from every album | Local file kept forever; row marked `missing_upstream` with timestamp; surfaced in the web UI and `status` (see §9, Reconcile) | Same |
+| Item removed from every album | Local file kept; row marked `missing_upstream` with timestamp; surfaced in the web UI and `status` (see §9, Reconcile). Only `gpb duplicates --delete` ever removes one, and only when the same photo is still backed up under another key (§14) | Same |
 | Album renamed | Album id is the key; title updated, on-disk pool layout unaffected (see §8) | Same |
 
 Backups never delete: upstream deletion is information, not an instruction.
@@ -1226,6 +1227,24 @@ that photograph until its replacement has landed. An *unreadable* file — a per
 volume that came up late — is reported and never requeued: re-downloading a library on the strength
 of a bad mount is a worse outcome than the fault. The command exits non-zero when it found
 anything, so a monthly cron entry needs no output parsing to notice.
+
+`gpb duplicates` (added 2026-09-14) is the one command that deletes, and the rule under which it
+does is deliberately the same one the review queue uses (`copyStillHeld`, one constant in the
+store): a written-off item is a *copy* when a `done` item holds the same sha256, or the same
+filename and capture second at a size at least as large. Google's listing carries a photo under
+a second key for days or weeks and then drops it — 145 of the first 300 write-offs in a library
+of 96,000 were such copies, 85 byte for byte and 60 as a smaller re-encode; 164 and 1.0 GB by
+the time the command was written — and each left a file in the pool that no link points at and
+a cell in the Photos grid with a thumbnail Google no longer serves. The command lists the pairs by
+default and acts only with `--delete`, and before it unlinks anything it re-reads the copy that
+stays and compares it with its recorded hash: a copy that cannot be read or hashes to something
+else keeps its twin, since the twin may then be the only good copy. The twin's row goes with
+the file — `Forget`, the only `DELETE` on `media_items`, in one transaction with the album
+memberships and the selection that point at it — because a row with no file would sit in the
+Photos grid for ever as that grey cell; removing the twins is what makes the cells go. Each pair is
+verify → unlink → forget
+on its own, so a crash leaves at most one file gone with its row still present, and the next pass
+finishes it. The daemon does not run this on a schedule: deleting is a thing a person asks for.
 
 The weekly database copy is the daemon's own, an hourly tick that asks the age of
 `/data/state.backup.db` rather than a timer this process holds — the same reasoning as the backup

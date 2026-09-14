@@ -117,6 +117,7 @@ docker compose logs -f gpb                      # what it is doing
 docker compose exec gpb gpb version             # which release is running
 docker compose exec gpb gpb status              # what the Google session is doing
 docker compose exec gpb gpb verify              # re-read the backed-up files, check every hash
+docker compose exec gpb gpb duplicates          # written-off files that are copies of photos still backed up
 docker compose pull && docker compose up -d     # update
 ```
 

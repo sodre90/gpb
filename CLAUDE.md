@@ -13,7 +13,7 @@ is written down there with the measurement that produced it.
 
 ```bash
 go build ./...
-go test ./...              # 534 tests across 15 packages
+go test ./...              # 539 tests across 15 packages
 cd spike && go test ./...  # the Phase 0 protocol spike, a separate module
 ```
 
@@ -38,7 +38,7 @@ Go 1.26.4 or later. `GPB_DATA_DIR`, `GPB_PHOTOS_DIR`, `GPB_CHROME_PATH`, `GPB_NO
 ## Layout
 
 ```
-cmd/gpb/                 daemon | status | passwd | albums | follow | unfollow | sync | links | verify
+cmd/gpb/                 daemon | status | passwd | albums | follow | unfollow | sync | links | verify | duplicates
 internal/auth/           chromedp warmup, session export, headful re-auth stack
 internal/config/         config.toml: defaults, validation, the password hash
 internal/gphotos/        the batchexecute protocol: listings, downloads, thumbnails

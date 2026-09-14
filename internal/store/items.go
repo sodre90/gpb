@@ -231,12 +231,17 @@ func (s *Store) MarkFailed(mediaKey string, cause error) error {
 // copies is not a loss, so neither is asked about. The copy that stays has to be at least as
 // large: the day the larger one goes and the smaller survives is a question, and stays one.
 const reviewUnlessACopyRemains = `CASE WHEN EXISTS (
-	SELECT 1 FROM media_items copy
-	WHERE copy.media_key != media_items.media_key AND copy.state = 'done'
+	SELECT 1 FROM media_items copy WHERE ` + copyStillHeld + `) THEN 0 ELSE 1 END`
+
+// copyStillHeld is the join between media_items and a backed-up row, copy, that holds the
+// same photograph: the same bytes, or the same name taken in the same second and at least as
+// large. It is one rule in one place, so the review queue and the duplicates command cannot
+// disagree about what a copy is.
+const copyStillHeld = `copy.media_key != media_items.media_key AND copy.state = 'done'
 	  AND ((media_items.sha256 IS NOT NULL AND copy.sha256 = media_items.sha256)
 	    OR (media_items.filename != '' AND copy.filename = media_items.filename
 	        AND copy.captured_at = media_items.captured_at
-	        AND copy.size_bytes >= media_items.size_bytes))) THEN 0 ELSE 1 END`
+	        AND copy.size_bytes >= media_items.size_bytes))`
 
 // MarkMissingUpstream flags an item that has vanished from Google. It never deletes: a
 // backup whose contents disappear because the source did is not a backup, so the local file

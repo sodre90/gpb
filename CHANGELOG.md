@@ -17,6 +17,16 @@
   sweep takes hours, the page says how far it has got until it is done, and a photo downloaded
   tonight is read as it lands. The database gained the two coordinates and the date each file
   was read, and a table of the places asked about.
+- **`gpb duplicates` removes the written-off copies.** 0.2.3 and 0.2.4 stopped asking about a
+  write-off whose photo is still backed up under another key, but the smaller or identical file
+  stayed on the disk, and they add up — 164 in the library this was built against, 1.0 GB. The new
+  command lists those files with the copy each duplicates, and `--delete` removes them, one at a
+  time, after re-reading the copy that stays and checking it still hashes to what was recorded;
+  a kept copy that cannot be verified keeps its twin. The row goes with the file, so the grid does
+  not keep a grey cell for it. It is the only thing in gpb that deletes, it runs only when asked,
+  and the daemon never runs it on its own.
+- **The place sweep no longer spins on a file it cannot open.** It stops when a batch records
+  nothing and tries again on the hour, instead of going round on the same file.
 
 ## 0.2.4 — 2026-09-14
 

@@ -154,6 +154,7 @@ gpb unfollow <id>          stop backing up an album
 gpb sync [--limit N]       run one backup pass now
 gpb links                  rebuild <photos>/albums/, the symlink view of the pool
 gpb verify [--repair]      re-read the backed-up files and check them against their hashes
+gpb duplicates [--delete]  list the written-off files that are copies of photos still backed up
 ```
 
 `verify` is the one nothing else does: a run notices a file that has *gone*, but a file quietly
@@ -161,6 +162,15 @@ rotted by a failing disk keeps its name, its size and its place in the pool, and
 it says so. It exits non-zero when it found anything, so a monthly cron entry needs no output
 parsing to notice; `--repair` puts the damaged files back on the work list for the next run to
 fetch again, and deletes nothing.
+
+`duplicates` is the one thing that does delete, and only one kind of file. Google's listing
+sometimes carries a photo under a second key for a while and then drops it; the second copy was
+backed up while it was there, and is written off when it goes. When the photo is still backed up
+under the key that stayed — the same bytes, or the same name taken in the same second and at
+least as large — the written-off copy is nothing but disk. `gpb duplicates` lists those pairs and
+touches nothing; `--delete` removes each written-off file and its row, after re-reading the copy
+that stays and checking it still hashes to what was recorded. A kept copy that cannot be read, or
+reads as something else, keeps its twin: the twin may be the only good copy left.
 
 Browser login works on macOS too, with one difference: instead of the embedded noVNC canvas,
 Chrome opens on your own screen and the web UI tells you to sign in there and come back. The VNC
