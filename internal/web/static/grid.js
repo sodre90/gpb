@@ -19,7 +19,8 @@
 
     const albumID = tools.dataset.album;
     const counter = document.getElementById("pickcount");
-    const cells = Array.from(grid.querySelectorAll(".grid-cell"));
+    // A timeline grid holds only the cells near the viewport, and answers for the rest.
+    const timeline = grid.gpbTimeline;
 
     // The Save button is the no-script path's whole point, and this is the script: from here on
     // every tick saves itself, so a button offering to do it again is a button that does nothing.
@@ -40,14 +41,21 @@
       event.preventDefault();
 
       const selected = !ticked(cell);
-      const affected = event.shiftKey && anchor ? range(anchor, cell) : [cell];
+      const ranged = event.shiftKey && anchor;
+      const affected = ranged ? range(anchor, cell) : [cell];
 
       // Painted before the request answers: a grid that waits for the network to show a tick feels
       // broken. A failure repaints from what the server still believes.
       affected.forEach((each) => setTicked(each, selected));
+      const from = anchor;
       anchor = cell;
 
-      send({ mediaKeys: affected.map(keyOf), selected: selected }, affected, !selected);
+      // A range on a timeline grid names its two ends and the store fills it in: the cells
+      // between them may not have been fetched at all, and the ones that have are painted here.
+      const change = ranged && timeline
+        ? { range: { from: keyOf(from), to: keyOf(cell) }, selected: selected }
+        : { mediaKeys: affected.map(keyOf), selected: selected };
+      send(change, affected, !selected);
     });
 
     tools.addEventListener("click", (event) => {
@@ -55,9 +63,17 @@
       if (!button) return;
 
       const selected = button.dataset.selected === "true";
+      const cells = everyCell();
       cells.forEach((cell) => setTicked(cell, selected));
       send({ scope: "album", selected: selected }, cells, !selected);
     });
+
+    // Every cell this page knows about: the ones on it, and on a timeline grid the ones it has
+    // fetched and set aside, which come back into view still ticked the way they were left.
+    function everyCell() {
+      if (timeline) return Array.from(timeline.cells());
+      return Array.from(grid.querySelectorAll(".grid-cell"));
+    }
 
     function boxIn(cell) {
       return cell.querySelector("input[type=checkbox]");
@@ -76,10 +92,12 @@
     }
 
     function range(from, to) {
-      const first = cells.indexOf(from);
-      const last = cells.indexOf(to);
-      if (first < 0 || last < 0) return [to];
-      return cells.slice(Math.min(first, last), Math.max(first, last) + 1);
+      const cells = everyCell();
+      const place = timeline ? timeline.indexOf : (cell) => cells.indexOf(cell);
+      const first = Math.min(place(from), place(to));
+      const last = Math.max(place(from), place(to));
+      if (Number.isNaN(first) || first < 0) return [to];
+      return cells.filter((cell) => place(cell) >= first && place(cell) <= last);
     }
 
     function send(body, affected, revertTo) {

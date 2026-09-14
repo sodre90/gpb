@@ -144,6 +144,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /{$}", s.requireSession(http.HandlerFunc(s.handleOverview)))
 	mux.Handle("GET /albums", s.requireSession(http.HandlerFunc(s.handleAlbums)))
 	mux.Handle("GET /photos", s.requireSession(http.HandlerFunc(s.handlePhotos)))
+	mux.Handle("GET /photos/cells", s.requireSessionForFragment(http.HandlerFunc(s.handlePhotoCells)))
 	mux.Handle("POST /album/{id}/mode", s.requireSession(http.HandlerFunc(s.handleAlbumMode)))
 	mux.Handle("POST /album/{id}/favourite", s.requireSession(http.HandlerFunc(s.handleAlbumFavourite)))
 	mux.Handle("POST /albums/refresh", s.requireSession(http.HandlerFunc(s.handleAlbumRefresh)))
@@ -172,6 +173,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /settings/restart", s.requireSession(http.HandlerFunc(s.handleRestart)))
 
 	mux.Handle("GET /album/{id}", s.requireSession(http.HandlerFunc(s.handleAlbum)))
+	mux.Handle("GET /album/{id}/cells", s.requireSessionForFragment(http.HandlerFunc(s.handleAlbumCells)))
 	mux.Handle("POST /album/{id}/grid-mode", s.requireSession(http.HandlerFunc(s.handleAlbumModeFromGrid)))
 	mux.Handle("POST /album/{id}/picks", s.requireSession(http.HandlerFunc(s.handlePicks)))
 	mux.Handle("POST /album/{id}/refresh", s.requireSession(http.HandlerFunc(s.handleAlbumItemRefresh)))

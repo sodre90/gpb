@@ -18,7 +18,7 @@
 </p>
 
 {{template "pager" .}}
-<div class="grid" id="grid">
+<div class="grid" id="grid" {{template "timeline-data" .Timeline}}>
   {{range .Items}}{{template "gridcell" .Shown}}{{end}}
 </div>
 {{template "pager" .}}
@@ -30,5 +30,6 @@
 {{end}}
 
 {{end}}
+<script src="/static/timeline.js" defer></script>
 <script src="/static/viewer.js" defer></script>
 {{end}}

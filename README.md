@@ -46,9 +46,22 @@ it to be current.
 ![An album's grid, with per-item state and sizes](docs/album.png)
 
 Click to pick, shift-click for a range, or select the whole album server-side without the
-browser ever handling every key. Selections live in the database, so paging through a
+browser ever handling every key. Selections live in the database, so scrolling a
 ten-thousand-item album never loses them. Each cell says what state its item is in: backed up,
 failed, waiting for a decision, gone from Google, or a video.
+
+## Finding a photo
+
+![The photo page: the whole library as one grid, with the years down the right edge](docs/photos.png)
+
+The Photos page is everything the account holds, newest first, as one grid — fifty thousand
+items on the library this was built against — and every album is laid out the same way. The
+months are headed, the month you are in floats at the top, and the years run down the right
+edge: drag along them and the page lands on any month in a few years' worth of photographs.
+Only the rows near the window are ever in the page, and the pictures are fetched once it stops
+moving, because each thumbnail is one request to Google and a drag across a decade passes
+thousands of them. Click a photo to look at it full size, from the file on disk; the arrow keys
+step through the whole library from there.
 
 ## Watching it work
 
@@ -223,7 +236,7 @@ rendered HTML answers. They are skipped by default, for the same reason as the p
 want a Chrome:
 
 ```bash
-GPB_BROWSER=1 go test ./internal/web/ -run 'Viewer|AlbumsPage'
+GPB_BROWSER=1 go test ./internal/web/ -run 'Viewer|AlbumsPage|Timeline'
 ```
 
 ## Where it has got to

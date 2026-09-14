@@ -412,6 +412,74 @@ Unchanged behaviourally; visually becomes a centred card with the app name above
 using the same components. Error and lockout messages render in the standard danger
 banner.
 
+### 3.9 The timeline — `/photos` and `/album/{id}` with script (added 2026-09-14)
+
+The audit's "reaching page 2 means scrolling past 200 cells" got worse, not better,
+once `/photos` existed: fifty thousand items is 262 pages, and a photograph from 2019
+was somewhere around page 180 with nothing but "older page" to get there. So a grid
+page is now two things. Without script it is what §3.3 describes — page 1, a pager,
+a form of checkboxes. With script the page becomes **the whole grid as one piece**:
+
+```
++---------------------------------------------------------------+---+
+|  [ July 2021 ]                     <- floating month, sticky  |2025
+|                                                               |2024
+|  July 2021                         <- month heading           |2023
+|  +----+ +----+ +----+ +----+ +----+ +----+ +----+ +----+      |
+|  |    | |    | |    | |    | |    | |    | |    | |    |      |2022
+|  +----+ +----+ +----+ +----+ +----+ +----+ +----+ +----+      |
+|  +----+ +----+ +----+ +----+ +----+ +----+ +----+  [July 2021]| o  <- mark, label
+|  |    | |    | |    | |    | |    | |    | |    |             |
+|  +----+ +----+ +----+ +----+ +----+ +----+ +----+             |2021
+|                                                               |
+|  June 2021                                                    |2020
+|  +----+ +----+ +----+ +----+ +----+ +----+ +----+ +----+      |
++---------------------------------------------------------------+---+
+```
+
+**How it is laid out.** The server puts the grid's months and their counts on the grid
+element as JSON, in the grid's own order (newest first on `/photos`, oldest first in an
+album — the order §3.3 chose, kept). The script measures one cell and one heading,
+works out the columns from the grid's own computed track list, and places every row —
+headings and cell rows — at a computed top inside a container of the total height. The
+browser's own scrollbar therefore spans the whole library before a single cell has been
+fetched. Only rows within a viewport's height of the window are in the document; the
+rest are numbers.
+
+**How it is filled.** Cells come in windows of 200 from `/photos/cells` and
+`/album/{id}/cells`, rendered through the same `gridcell` block as the page, so a cell
+placed by script is byte-for-byte what a reload draws — `data-held`, marks and ticks
+included. The page's own 200 are the first window held. A row whose window has not
+arrived shows blank cells with the shimmer from §3.3. Windows far from the viewport are
+let go after forty are held.
+
+**The rail.** Fixed to the right edge while the grid is on screen and taller than
+one-and-a-half windows; the page keeps 3.5rem clear of it. Years down the track where
+their first item falls, skipping any that would land on the one before; a mark for the
+viewport; a label naming the month under the pointer. A drag lands on the month's
+heading. `touch-action: none`, so on a phone a finger on it moves the mark and not the
+page; below 40rem the years go and the label under the finger is what names the month.
+
+**The rule that shapes everything else.** A thumbnail is one throttled request to
+Google (§11 of DESIGN.md), so a drag across a decade must not queue a minute of
+traffic for photographs nobody looked at. Nothing is fetched while the rail is held or
+within 150ms of the page moving: the rows show blank and the labels say where you are,
+and the pictures come when the page stops. This is the same trade Google's own scrubber
+makes, for the same reason.
+
+**What had to change to keep §3.3's promises.** A shift-click range used to be the DOM
+cells between two others; on a timeline those may not exist, so the request names its
+two ends and `store.SelectRange` fills it in, in grid order, undated items and all — the
+browser paints the cells it has and the rest arrive from the server already ticked.
+"Pick all" was already server-side. The viewer stepped through a DOM snapshot; it now
+steps through a source with a length and an `at(index)` that fetches, so ← from the
+first photograph is the last of 52,245 and the counter says so.
+
+**Not done, deliberately.** No keyboard path along the rail: the month headings, the
+floating month and the page's own scrolling are the keyboard's route, and a rail that
+took arrow keys would take them from the viewer. No day headings: a month is the unit a
+person remembers; a day is what the caption is for.
+
 ## 4. Visual system
 
 Defined once in `preview.css` (→ future `app.css`). Everything below exists in the
@@ -489,7 +557,9 @@ shadows are the first thing to look wrong across light/dark). Radius: 8px cards,
 | **Grid cell** | album grid + review queue; checkbox+label anatomy from §3.3; shimmer while loading (existing, kept) |
 | **Empty state** | dashed-border card, one sentence, one action; first-run screens, empty album, empty review, no runs |
 | **State dot** | Google session line (kept from `app.css:96–108`, tokenised) |
-| **Pager** | grid top and bottom |
+| **Pager** | grid top and bottom, for a browser without script; the script removes it |
+| **Timeline** | a grid page with script: rows placed by measurement, month headings, the floating month; §3.9 |
+| **Rail** | the years down the window's edge, the mark, the label under the pointer; §3.9 |
 | **Disclosure** | bundles section (URL-driven link, as today — the reasoning in `albumsort.go:169–181` stands); `<details>` for Google diagnostics, where nothing inside reloads the page |
 
 ## 5. Interaction and feedback model

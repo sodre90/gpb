@@ -55,7 +55,11 @@ func TestScreenshotsForTheReadme(t *testing.T) {
 	for _, shot := range []shot{
 		{name: "overview", path: "/", waitFor: ".card"},
 		{name: "albums", path: "/albums", waitFor: "table.albums"},
-		{name: "album", path: "/album/" + firstAlbumID, waitFor: ".grid"},
+		// A grid page is the whole library laid out, sixty thousand pixels of it on the photo
+		// page, and a photograph of all that is a photograph of nothing; one window of it is
+		// what a reader sees.
+		{name: "album", path: "/album/" + firstAlbumID, waitFor: ".grid", justTheWindow: true},
+		{name: "photos", path: "/photos", waitFor: ".grid", justTheWindow: true},
 		{name: "runs", path: "/runs", waitFor: "table.runs"},
 		// The settings page ends with a card of read-only paths, one of which is the scratch
 		// directory this test was handed. Photographing the form alone keeps a temporary path
@@ -69,6 +73,7 @@ func TestScreenshotsForTheReadme(t *testing.T) {
 type shot struct {
 	name, path, waitFor string
 	justTheElement      bool
+	justTheWindow       bool
 }
 
 const firstAlbumID = "album-ada"
@@ -113,6 +118,9 @@ func capture(t *testing.T, browser context.Context, url string, wanted shot) {
 	take := chromedp.FullScreenshot(&png, 100)
 	if wanted.justTheElement {
 		take = chromedp.Screenshot(wanted.waitFor, &png, chromedp.ByQuery)
+	}
+	if wanted.justTheWindow {
+		take = chromedp.CaptureScreenshot(&png)
 	}
 	if err := chromedp.Run(browser,
 		chromedp.Navigate(url),

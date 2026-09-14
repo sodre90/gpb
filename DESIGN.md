@@ -843,6 +843,19 @@ srv := &http.Server{Addr: cfg.Web.Listen, Handler: protection.Handler(mux)}
   The album list gained a **"nothing picked"** badge from building this: an album in `picked`
   mode with an empty selection backs up nothing while looking, on every other column,
   exactly like a followed album whose first sync has not run.
+  **Superseded in one respect (2026-09-14):** the pages of 200 are now only what a browser
+  without script gets. With script, the grid — on `/album/{id}` and on `/photos`, the
+  whole-library grid that was added later — is **one piece, virtualised**: the server puts the
+  grid's months and their counts on the grid element (`store.EveryItemMonths`,
+  `store.AlbumMonths`, over a new `captured_at` index), the script lays every row out from
+  those counts before fetching anything, and only the rows near the viewport exist in the
+  document, filled from `/photos/cells` and `/album/{id}/cells` — windows of 200 rendered
+  through the same `gridcell` template as the page. A **rail** down the right edge carries the
+  years and a drag along it lands on any month. Two consequences for the rules above:
+  shift-click ranges are resolved **by the store** (`SelectRange`, the two ends in grid order)
+  because the cells between may never have reached the browser; and nothing is fetched while
+  the rail is being dragged or the page is still moving, because every thumbnail is one
+  throttled Google request (§11) and a drag across ten years passes thousands of them.
   **(d)** Opening an album nobody has listed yet starts the listing itself rather than showing
   an empty grid and a button: arriving at a page that appears to say "this album is empty" is
   a worse first impression than a moment's wait, and the page already polls while it runs.

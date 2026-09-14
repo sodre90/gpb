@@ -8,9 +8,12 @@
 (function () {
   let viewer = null;
   // A group at a time: the review page stacks one grid per album, and arrowing out of the album
-  // you are deciding about into the next one would lose your place in both.
-  let group = [];
+  // you are deciding about into the next one would lose your place in both. A group answers
+  // for its length and for the cell at an index, which a grid holding only the cells near the
+  // viewport answers by fetching — so a step is a promise, and the counter can say "of 52,245".
+  let group = null;
   let showing = -1;
+  let asked = 0;
 
   // What the stage is holding and how closely it is being looked at. Scale 1 is the whole
   // photograph in the window; above it the photograph is larger than the window and the pan says
@@ -27,8 +30,10 @@
   document.addEventListener("gpb:swapped", wireGrids);
 
   function wireGrids() {
-    const grids = Array.from(document.querySelectorAll(".grid")).filter(
-      (grid) => !grid.dataset.viewerWired && grid.querySelector(".grid-cell[data-key]"));
+    // The rows a timeline grid places inside itself are grids too; the timeline answers for
+    // all of them, so only the outer one is wired.
+    const grids = Array.from(document.querySelectorAll(".grid:not(.timeline .grid)")).filter(
+      (grid) => !grid.dataset.viewerWired && (grid.gpbTimeline || grid.querySelector(".grid-cell[data-key]")));
     if (grids.length === 0) return;
 
     viewer = viewer || build();
@@ -37,12 +42,7 @@
 
   function wire(grid) {
     grid.dataset.viewerWired = "true";
-    const cells = Array.from(grid.querySelectorAll(".grid-cell[data-key]"));
-
-    // The button is hidden in the markup so a scriptless browser is never shown a control that
-    // does nothing, and revealed everywhere here because it is also the only way to open a photo
-    // from the keyboard.
-    cells.forEach((cell) => (cell.querySelector("[data-open]").hidden = false));
+    const source = grid.gpbTimeline ? timelineGroup(grid) : staticGroup(grid);
 
     // A cell in a picking grid belongs to the checkbox: a click there means "back this one up",
     // and stealing it for the viewer would make picking impossible. Elsewhere a click on the
@@ -55,18 +55,53 @@
       if (picking && !event.target.closest("[data-open]")) return;
 
       event.preventDefault();
-      group = cells;
-      show(cells.indexOf(cell));
+      group = source;
+      show(source.indexOf(cell));
     });
+  }
+
+  // The button is hidden in the markup so a scriptless browser is never shown a control that
+  // does nothing, and revealed here because it is also the only way to open a photo from the
+  // keyboard.
+  function reveal(cells) {
+    cells.forEach((cell) => (cell.querySelector("[data-open]").hidden = false));
+  }
+
+  function staticGroup(grid) {
+    const cells = Array.from(grid.querySelectorAll(".grid-cell[data-key]"));
+    reveal(cells);
+    return {
+      length: cells.length,
+      at: (index) => Promise.resolve(cells[index]),
+      indexOf: (cell) => cells.indexOf(cell),
+    };
+  }
+
+  // A timeline grid's cells arrive as the reader scrolls, and blank cells stand in for the
+  // ones that have not, which have no key and cannot be opened.
+  function timelineGroup(grid) {
+    const timeline = grid.gpbTimeline;
+    reveal(Array.from(timeline.cells()));
+    grid.addEventListener("gpb:cells", (event) => reveal(event.detail.cells));
+    return timeline;
   }
 
   function step(by) {
     show((showing + by + group.length) % group.length);
   }
 
+  // Two quick steps can ask for two cells, and the one that arrives second must be the one that
+  // stays, whichever fetch answered first.
   function show(index) {
+    if (index < 0) return;
     showing = index;
-    const cell = group[index];
+    const request = ++asked;
+    group.at(index).then((cell) => {
+      if (request === asked && cell) present(cell, index);
+    });
+  }
+
+  function present(cell, index) {
     const held = cell.hasAttribute("data-held");
     const key = encodeURIComponent(cell.dataset.key);
 
@@ -76,7 +111,8 @@
 
     viewer.querySelector("figcaption").textContent =
       cell.dataset.caption + (held ? "" : " — not backed up yet, so this is Google’s thumbnail");
-    viewer.querySelector(".viewer-counter").textContent = `${index + 1} of ${group.length}`;
+    viewer.querySelector(".viewer-counter").textContent =
+      `${(index + 1).toLocaleString("en-US")} of ${group.length.toLocaleString("en-US")}`;
 
     if (!viewer.open) viewer.showModal();
   }

@@ -20,6 +20,7 @@ type photosView struct {
 	PrevPage int
 	NextPage int
 	BackedUp int
+	Timeline timeline
 }
 
 func (s *Server) handlePhotos(w http.ResponseWriter, r *http.Request) {
@@ -53,11 +54,20 @@ func (s *Server) photosView(page int) (photosView, error) {
 	if err != nil {
 		return photosView{}, err
 	}
+	months, err := s.store.EveryItemMonths()
+	if err != nil {
+		return photosView{}, err
+	}
+	timeline, err := timelineFor("/photos/cells", months, total, page)
+	if err != nil {
+		return photosView{}, err
+	}
 
 	view := photosView{
 		Total: total, BackedUp: set.Done,
 		Page: page, Pages: pages, PrevPage: page - 1, NextPage: page + 1,
-		Items: make([]itemCell, 0, len(items)),
+		Items:    make([]itemCell, 0, len(items)),
+		Timeline: timeline,
 	}
 	for _, item := range items {
 		view.Items = append(view.Items, cellFor(item, false))

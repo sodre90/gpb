@@ -47,7 +47,7 @@
        what stops a tab left open from clearing a pick made somewhere else since it rendered. */}}
   {{if .Picking}}{{range .Items}}<input type="hidden" name="shown" value="{{.MediaKey}}">{{end}}{{end}}
   {{template "pager" .}}
-  <div class="grid{{if .Picking}} grid-picking{{end}}" id="grid">
+  <div class="grid{{if .Picking}} grid-picking{{end}}" id="grid" {{template "timeline-data" .Timeline}}>
     {{range .Items}}{{template "gridcell" (.In "pick")}}{{end}}
   </div>
   {{template "pager" .}}
@@ -121,6 +121,7 @@
 
 {{end}}
 <script src="/static/saving.js" defer></script>
+<script src="/static/timeline.js" defer></script>
 <script src="/static/viewer.js" defer></script>
 <script src="/static/grid.js" defer></script>
 {{end}}

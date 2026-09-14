@@ -47,6 +47,7 @@ type albumView struct {
 	Picking       bool
 	Activity      string
 	Running       bool
+	Timeline      timeline
 }
 
 type itemCell struct {
@@ -151,6 +152,14 @@ func (s *Server) albumView(albumID string, page int) (albumView, error) {
 	if err != nil {
 		return albumView{}, err
 	}
+	months, err := s.store.AlbumMonths(albumID)
+	if err != nil {
+		return albumView{}, err
+	}
+	timeline, err := timelineFor("/album/"+url.PathEscape(albumID)+"/cells", months, total, page)
+	if err != nil {
+		return albumView{}, err
+	}
 
 	view := albumView{
 		ID: album.ID, Title: album.Title, Mode: album.SyncMode,
@@ -161,6 +170,7 @@ func (s *Server) albumView(albumID string, page int) (albumView, error) {
 		Picking:  album.SyncMode == store.SyncPicked,
 		Activity: s.runs.Activity(),
 		Items:    make([]itemCell, 0, len(items)),
+		Timeline: timeline,
 	}
 	view.Running = view.Activity != ""
 	for _, item := range items {
@@ -191,6 +201,14 @@ type pickRequest struct {
 	MediaKeys []string `json:"mediaKeys"`
 	Selected  bool     `json:"selected"`
 	Scope     string   `json:"scope"`
+	// Range names the two ends of a shift-click. The cells between them may not be on the page
+	// at all — the grid holds only the cells near the viewport — so the store fills the range in.
+	Range *pickRange `json:"range"`
+}
+
+type pickRange struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 type pickResponse struct {
@@ -308,6 +326,9 @@ func (s *Server) pickedOnThePage(albumID string, shown, ticked []string) (picked
 func (s *Server) applyPicks(albumID string, request pickRequest) error {
 	if request.Scope == "album" {
 		return s.store.SelectWholeAlbum(albumID, request.Selected)
+	}
+	if request.Range != nil {
+		return s.store.SelectRange(albumID, request.Range.From, request.Range.To, request.Selected)
 	}
 	if len(request.MediaKeys) > maxKeysPerRequest {
 		return fmt.Errorf("a picks request carried %d keys", len(request.MediaKeys))

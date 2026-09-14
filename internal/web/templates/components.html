@@ -25,6 +25,13 @@
 </figure>
 {{end}}
 
+{{/* timeline-data is what the grid's script lays the whole grid out from — see timeline.go. */}}
+{{define "timeline-data"}}data-cells="{{.Cells}}" data-total="{{.Total}}" data-offset="{{.Offset}}" data-window="{{.Window}}" data-months="{{.Months}}"{{end}}
+
+{{/* gridcells is a window of a grid on its own, for the script that fetches the cells near the
+     viewport as the reader scrolls. */}}
+{{define "gridcells"}}{{range .Cells}}{{template "gridcell" .}}{{end}}{{end}}
+
 {{/* nowcard is the run in flight. It is a block of its own because live.js asks for it on its
      own, and what the script puts on the page has to be what a reload would have put there. */}}
 {{define "nowcard"}}

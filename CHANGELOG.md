@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.0 — 2026-09-14
+
+- **The Photos page and every album are one scrolling grid, with the years down the right
+  edge.** Ninety-six thousand items at two hundred a page was four hundred and eighty pages
+  with nothing but "older page" between them, and a photograph from 2019 was somewhere past the
+  three hundredth. Now the page lays the whole grid out from the months and their counts before
+  it has fetched a single cell, so the browser's own scrollbar spans the library; months are
+  headed, the month you are in floats at the top, and a rail down the right edge carries the
+  years — drag along it and the page lands on any month. Only the rows near the window are
+  ever in the page. The pictures are fetched once the page stops moving, because every
+  thumbnail is one throttled request to Google and a drag across a decade passes thousands of
+  them; while it moves you see grey cells and the month's name, which is the trade Google's
+  own scrubber makes. A browser without script gets the pages of two hundred it always did.
+- **Picking and the viewer follow the grid over cells the browser never fetched.** A
+  shift-click range names its two ends and the store fills it in, so a range from January to
+  June works whether or not April was ever on screen; "pick all" was already done that way.
+  The viewer's arrows step through the whole grid, fetching what they need, and its counter
+  says "1 of 96,439" rather than "1 of 200".
+- The store gained an index on capture date — every grid was sorting the whole library to show
+  two hundred of it.
+
 ## 0.1.6 — 2026-09-14
 
 - **The grid's expand button no longer covers a photo's status marks.** Both lived in the

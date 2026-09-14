@@ -13,7 +13,7 @@ is written down there with the measurement that produced it.
 
 ```bash
 go build ./...
-go test ./...              # 498 tests across 13 packages
+go test ./...              # 506 tests across 13 packages
 cd spike && go test ./...  # the Phase 0 protocol spike, a separate module
 ```
 
@@ -21,7 +21,7 @@ Two suites are skipped by default because they want a real Chrome:
 
 ```bash
 GPB_SCREENSHOTS=1 go test ./internal/web/ -run Screenshots      # redraw docs/*.png
-GPB_BROWSER=1 go test ./internal/web/ -run 'Viewer|AlbumsPage'  # questions no rendered HTML answers
+GPB_BROWSER=1 go test ./internal/web/ -run 'Viewer|AlbumsPage|Timeline'  # questions no rendered HTML answers
 ```
 
 Running it without a container:
