@@ -31,7 +31,7 @@ correct where it is not.
 ## 2. Get the image
 
 ```bash
-podman pull docker.io/sodre90/gpb:0.1.6
+podman pull docker.io/sodre90/gpb:0.2.0
 ```
 
 It is linux/amd64: Google ships Chrome for Linux on that architecture and no other. The image
