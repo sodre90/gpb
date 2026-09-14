@@ -224,14 +224,19 @@ func (s *Store) MarkFailed(mediaKey string, cause error) error {
 }
 
 // reviewUnlessACopyRemains is the review flag for an item being written off. Google drops
-// items whose bytes it already holds under another key — a library of 96,000 had 300 written
-// off in its first month, and 85 of those were byte-for-byte copies of photos still there
-// and still backed up. Losing one of two identical files is not a loss, so those are not
-// asked about; a copy that differs at all, even a smaller re-encode of the same shot, is.
-const reviewUnlessACopyRemains = `CASE WHEN media_items.sha256 IS NOT NULL AND EXISTS (
+// items it already holds under another key — a library of 96,000 had 300 written off in its
+// first month, and 145 of those were the same photo as one still there and still backed up:
+// 85 byte for byte, 60 as a smaller re-encode of a shot whose original stayed, the same file
+// name and the same capture second. Losing one of two copies is not a loss, so neither is
+// asked about. The copy that stays has to be at least as large: the day the original goes
+// and the re-encode survives is a question, and it stays one.
+const reviewUnlessACopyRemains = `CASE WHEN EXISTS (
 	SELECT 1 FROM media_items copy
-	WHERE copy.sha256 = media_items.sha256 AND copy.media_key != media_items.media_key
-	  AND copy.state = 'done') THEN 0 ELSE 1 END`
+	WHERE copy.media_key != media_items.media_key AND copy.state = 'done'
+	  AND ((media_items.sha256 IS NOT NULL AND copy.sha256 = media_items.sha256)
+	    OR (media_items.filename != '' AND copy.filename = media_items.filename
+	        AND copy.captured_at = media_items.captured_at
+	        AND copy.size_bytes >= media_items.size_bytes))) THEN 0 ELSE 1 END`
 
 // MarkMissingUpstream flags an item that has vanished from Google. It never deletes: a
 // backup whose contents disappear because the source did is not a backup, so the local file

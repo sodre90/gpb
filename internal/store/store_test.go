@@ -247,14 +247,21 @@ func TestASuccessfulDownloadClearsTheFailureHistory(t *testing.T) {
 	}
 }
 
-// Google drops an item whose bytes it already holds under another key. Losing one of two
-// identical files is not a loss, so that write-off is not put up for review; a copy that
-// differs at all — a smaller re-encode of the same shot — still is.
+// Google drops an item it already holds under another key. Losing one of two copies is not a
+// loss, so that write-off is not put up for review: the same bytes, or the same file name and
+// capture second with the larger copy staying. The larger copy going is still a question.
 func TestAWrittenOffCopyOfAPhotoStillThereIsNotPutUpForReview(t *testing.T) {
 	store := openTestStore(t)
-	albumID := seedFollowedAlbum(t, store, SyncAll, "kept", "identical", "re-encoded", "never-fetched")
-	for key, sha := range map[string]string{"kept": "abc", "identical": "abc", "re-encoded": "def"} {
-		if err := store.MarkDownloaded(MediaItem{MediaKey: key, Filename: key + ".jpg", LocalPath: "/pool/" + key, SHA256: sha}, noon); err != nil {
+	albumID := seedFollowedAlbum(t, store, SyncAll, "kept", "identical", "re-encoded", "better-than-kept", "never-fetched")
+	downloaded := map[string]MediaItem{
+		"kept":             {Filename: "IMAG0003.jpg", SHA256: "abc", SizeBytes: 1000},
+		"identical":        {Filename: "copy.jpg", SHA256: "abc", SizeBytes: 1000},
+		"re-encoded":       {Filename: "IMAG0003.jpg", SHA256: "def", SizeBytes: 700},
+		"better-than-kept": {Filename: "IMAG0003.jpg", SHA256: "ghi", SizeBytes: 1300},
+	}
+	for key, item := range downloaded {
+		item.MediaKey, item.LocalPath = key, "/pool/"+key
+		if err := store.MarkDownloaded(item, noon); err != nil {
 			t.Fatalf("marking %s downloaded: %v", key, err)
 		}
 	}
@@ -267,11 +274,11 @@ func TestAWrittenOffCopyOfAPhotoStillThereIsNotPutUpForReview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reconciling the album: %v", err)
 	}
-	if departed != (Departures{LeftTheAlbum: 3, GoneFromGoogle: 3, Copies: 1}) {
-		t.Errorf("the reconcile reports %+v, want three gone of which one a copy", departed)
+	if departed != (Departures{LeftTheAlbum: 4, GoneFromGoogle: 4, Copies: 2}) {
+		t.Errorf("the reconcile reports %+v, want four gone of which two copies", departed)
 	}
 
-	for key, wantReview := range map[string]bool{"identical": false, "re-encoded": true, "never-fetched": true} {
+	for key, wantReview := range map[string]bool{"identical": false, "re-encoded": false, "better-than-kept": true, "never-fetched": true} {
 		item, err := store.Item(key)
 		if err != nil {
 			t.Fatalf("reading %s: %v", key, err)

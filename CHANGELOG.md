@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.4 — 2026-09-14
+
+- **A smaller re-encode of a photo still there is a copy too.** 0.2.3 left a write-off out of
+  review when its bytes were still held under another key, and the queue still showed the
+  same pictures: the phone that re-uploaded them had sent them smaller, so the bytes differed
+  while the photo did not. A write-off with the same file name and the same capture second as
+  a photo still there, where the copy that stayed is at least as large, is now a copy as well
+  — 60 more in this library, and in every one of them the original was the one that stayed.
+  The day the original goes and the re-encode survives is still a question, and stays one.
+  The 60 already waiting are cleared on the first start.
+
 ## 0.2.3 — 2026-09-14
 
 - **A photo written off while an identical copy of it is still there is no longer put up for
