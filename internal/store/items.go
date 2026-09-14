@@ -223,13 +223,13 @@ func (s *Store) MarkFailed(mediaKey string, cause error) error {
 	return requireOneRow(result, "media item", mediaKey)
 }
 
-// reviewUnlessACopyRemains is the review flag for an item being written off. Google drops
-// items it already holds under another key — a library of 96,000 had 300 written off in its
-// first month, and 145 of those were the same photo as one still there and still backed up:
-// 85 byte for byte, 60 as a smaller re-encode of a shot whose original stayed, the same file
-// name and the same capture second. Losing one of two copies is not a loss, so neither is
-// asked about. The copy that stays has to be at least as large: the day the original goes
-// and the re-encode survives is a question, and it stays one.
+// reviewUnlessACopyRemains is the review flag for an item being written off. Google's
+// listing sometimes carries a photo under a second key for a few days and then drops it — a
+// library of 96,000, with nothing uploaded to it, had 300 written off in its first month, and
+// 145 of those were the same photo as one still there and still backed up: 85 byte for byte,
+// 60 as a smaller file with the same name and the same capture second. Losing one of two
+// copies is not a loss, so neither is asked about. The copy that stays has to be at least as
+// large: the day the larger one goes and the smaller survives is a question, and stays one.
 const reviewUnlessACopyRemains = `CASE WHEN EXISTS (
 	SELECT 1 FROM media_items copy
 	WHERE copy.media_key != media_items.media_key AND copy.state = 'done'

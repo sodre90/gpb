@@ -4,18 +4,21 @@
 
 - **A smaller re-encode of a photo still there is a copy too.** 0.2.3 left a write-off out of
   review when its bytes were still held under another key, and the queue still showed the
-  same pictures: the phone that re-uploaded them had sent them smaller, so the bytes differed
-  while the photo did not. A write-off with the same file name and the same capture second as
-  a photo still there, where the copy that stayed is at least as large, is now a copy as well
-  — 60 more in this library, and in every one of them the original was the one that stayed.
-  The day the original goes and the re-encode survives is still a question, and stays one.
-  The 60 already waiting are cleared on the first start.
+  same pictures: the second key carried the same shot at a smaller size, so the bytes differed
+  while the photo did not. Nothing was uploaded to make that happen — the photos have been in
+  Google Photos for ten years; the extra keys turned up in Google's own listing weeks into the
+  backup and were gone again within days, and what Google was doing there is not known. A
+  write-off with the same file name and the same capture second as a photo still there, where
+  the copy that stayed is at least as large, is now a copy as well — 60 more in this library,
+  and in every one of them the larger file was the one that stayed. The day the larger one
+  goes and the smaller survives is still a question, and stays one. The 60 already waiting are
+  cleared on the first start.
 
 ## 0.2.3 — 2026-09-14
 
 - **A photo written off while an identical copy of it is still there is no longer put up for
-  review.** Google drops items whose bytes it already holds under another key — a phone
-  re-uploading an old folder does it — and each one was reported as a photo Google had lost.
+  review.** Google's listing sometimes carries the same bytes under two keys for a few days
+  and then drops one, and each one dropped was reported as a photo Google had lost.
   In this library, 85 of the 300 written off in the first month were byte-for-byte copies of
   photos still on Google and still backed up; a reader checking one found the photo exactly
   where it had always been. Losing one of two identical files is not a loss. The write-off
