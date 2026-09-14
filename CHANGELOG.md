@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.5 — 2026-09-14
+
+- **A photo Google has lost now opens from its own file.** The review page said those photos
+  were safe on disk, and they were — but opening one showed Google's 256-pixel thumbnail
+  stretched to fill the viewer, captioned "not backed up yet". The grid decided whether it held
+  a file from the item's state being *done*, and writing an item off replaces that state with
+  *missing upstream* while leaving the file exactly where it was. Whether a file exists is what
+  the recorded path says, so the grid reads that instead: the backed-up mark, the size and the
+  viewer's route to the original all come back for the items the page exists to vouch for.
+
 ## 0.1.4 — 2026-09-10
 
 - **An album with nothing in it is no longer read as a broken one.** Google answers an empty
