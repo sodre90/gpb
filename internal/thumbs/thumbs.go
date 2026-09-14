@@ -74,14 +74,24 @@ func (c *Cache) Get(ctx context.Context, mediaKey, baseURL string, fetcher Fetch
 	return c.fetchOnce(ctx, mediaKey, baseURL, fetcher)
 }
 
-// fetchOnce collapses concurrent misses for one key into a single upstream request.
+// fetchOnce collapses concurrent misses for one key into a single upstream request. The
+// request that arrived first carries the fetch on its own context, and a browser abandons
+// grid images freely — a cell scrolled away lets its request go — so a waiter whose leader
+// was cancelled takes the fetch up itself rather than reporting the leader's cancellation as
+// its own.
 func (c *Cache) fetchOnce(ctx context.Context, mediaKey, baseURL string, fetcher Fetcher) ([]byte, error) {
-	c.mu.Lock()
-	if existing, found := c.waiting[mediaKey]; found {
+	for {
+		c.mu.Lock()
+		existing, found := c.waiting[mediaKey]
+		if !found {
+			break
+		}
 		c.mu.Unlock()
 		select {
 		case <-existing.done:
-			return existing.bytes, existing.err
+			if !errors.Is(existing.err, context.Canceled) {
+				return existing.bytes, existing.err
+			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}

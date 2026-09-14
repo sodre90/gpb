@@ -43,7 +43,7 @@ type MonthCount struct {
 // is descending, and first in an album — so the two never disagree about where a cell is.
 func (s *Store) EveryItemMonths() ([]MonthCount, error) {
 	return s.queryMonths(`
-		SELECT `+captureMonth+` AS month, COUNT(*) FROM media_items
+		SELECT ` + captureMonth + ` AS month, COUNT(*) FROM media_items
 		GROUP BY month ORDER BY month DESC`)
 }
 

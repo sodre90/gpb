@@ -53,6 +53,7 @@
 
     document.querySelectorAll("nav.pager").forEach((pager) => pager.remove());
     grid.classList.add("timeline");
+    parkImages(grid);
     grid.replaceChildren();
 
     const now = document.createElement("div");
@@ -172,6 +173,7 @@
       }
       mounted.forEach((element, index) => {
         if (wanted.has(index)) return;
+        parkImages(element);
         element.remove();
         mounted.delete(index);
       });
@@ -222,12 +224,33 @@
       const element = document.createElement("div");
       element.className = "grid timeline-row";
       const cells = fetchedCells(row.first, row.count);
-      if (cells) element.append(...cells);
-      else {
+      if (cells) {
+        cells.forEach(resumeImage);
+        element.append(...cells);
+      } else {
         for (let i = 0; i < row.count; i++) element.append(blankCell());
         element.dataset.pending = "true";
       }
       return element;
+    }
+
+    // A cell's thumbnail is a throttled request to Google, and the browser goes on loading an
+    // image after its element has left the document. Five jumps along the rail would queue five
+    // screens of pictures nobody is looking at ahead of the one they are — so a row that leaves
+    // the document lets go of what it was still waiting for, and asks again if it comes back.
+    function parkImages(element) {
+      element.querySelectorAll("img.thumb[src]").forEach((image) => {
+        if (image.complete) return;
+        image.dataset.src = image.getAttribute("src");
+        image.removeAttribute("src");
+      });
+    }
+
+    function resumeImage(cell) {
+      const image = cell.querySelector("img.thumb[data-src]");
+      if (!image) return;
+      image.setAttribute("src", image.dataset.src);
+      delete image.dataset.src;
     }
 
     function blankCell() {

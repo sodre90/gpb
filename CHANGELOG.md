@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1 — 2026-09-14
+
+- **A jump along the rail lets go of the thumbnails it left behind.** A browser goes on
+  loading an image after its cell has left the document, and thumbnails are throttled to a few
+  a second because each is a request to Google — so five jumps along the rail queued five
+  screens of pictures nobody was looking at ahead of the one they were, and the page took the
+  best part of a minute to fill. A row that leaves the document now parks its unfinished
+  images, and a cell that comes back asks again. Two things had to follow: a request the
+  browser abandoned is no longer answered or logged, and a cell that waited on the same
+  thumbnail as one that scrolled away fetches it for itself rather than inheriting the
+  cancellation as a grey square.
+
 ## 0.2.0 — 2026-09-14
 
 - **The Photos page and every album are one scrolling grid, with the years down the right

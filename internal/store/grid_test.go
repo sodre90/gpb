@@ -58,9 +58,9 @@ func TestMonthsFoldOnTheCaptionsClock(t *testing.T) {
 func TestMonthsFollowEachGridsOrderIncludingUndatedItems(t *testing.T) {
 	store := openTestStore(t)
 	albumID := seedDatedAlbum(t, store, map[string]time.Time{
-		"a-2024": time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC),
-		"b-2024": time.Date(2024, 3, 2, 12, 0, 0, 0, time.UTC),
-		"c-2026": time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
+		"a-2024":  time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC),
+		"b-2024":  time.Date(2024, 3, 2, 12, 0, 0, 0, time.UTC),
+		"c-2026":  time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
 		"undated": {},
 	})
 

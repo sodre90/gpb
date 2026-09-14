@@ -108,6 +108,45 @@ func TestConcurrentMissesCollapseIntoOneFetch(t *testing.T) {
 	}
 }
 
+// The browser lets go of a thumbnail's request when its cell scrolls away, and the same key
+// may be asked for again a moment later by a cell that stayed. The first request's
+// cancellation is its own; the second must still get the picture.
+func TestAWaiterOutlivesALeaderThatWasCancelled(t *testing.T) {
+	cache := newCache(t, 1<<20)
+	source := &fakeSource{body: "jpeg-bytes", release: make(chan struct{})}
+
+	leaderContext, cancelLeader := context.WithCancel(t.Context())
+	leaderDone := make(chan error, 1)
+	go func() {
+		_, err := cache.Get(leaderContext, "AF1QipAAAA", "https://example/thumb", source)
+		leaderDone <- err
+	}()
+	time.Sleep(20 * time.Millisecond)
+
+	waiterDone := make(chan []byte, 1)
+	go func() {
+		image, err := cache.Get(t.Context(), "AF1QipAAAA", "https://example/thumb", source)
+		if err != nil {
+			t.Errorf("the waiter failed: %v", err)
+		}
+		waiterDone <- image
+	}()
+	time.Sleep(20 * time.Millisecond)
+
+	cancelLeader()
+	if err := <-leaderDone; !errors.Is(err, context.Canceled) {
+		t.Fatalf("the cancelled leader reported %v", err)
+	}
+	close(source.release)
+
+	if image := <-waiterDone; string(image) != "jpeg-bytes" {
+		t.Errorf("the waiter received %q", image)
+	}
+	if source.count() != 2 {
+		t.Errorf("Google was asked %d times, want 2: the leader's abandoned fetch and the waiter's own", source.count())
+	}
+}
+
 func TestAFailedFetchIsNotCached(t *testing.T) {
 	cache := newCache(t, 1<<20)
 	source := &fakeSource{err: errors.New("google said no")}

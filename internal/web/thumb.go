@@ -94,6 +94,11 @@ func (s *Server) handleThumb(w http.ResponseWriter, r *http.Request) {
 
 	image, err := s.thumbs.Get(r.Context(), item.MediaKey, item.ThumbnailURL, s.images)
 	if err != nil {
+		// The grid lets go of a cell's image when the cell scrolls away; there is nobody to
+		// answer and nothing worth a log line.
+		if errors.Is(err, context.Canceled) {
+			return
+		}
 		if !errors.Is(err, gphotos.ErrNoThumbnail) {
 			log.Printf("web: fetching a thumbnail: %v", err)
 		}

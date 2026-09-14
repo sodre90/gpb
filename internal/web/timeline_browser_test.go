@@ -3,8 +3,11 @@ package web
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http/httptest"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -127,6 +130,90 @@ func TestTheTimelinePicksRangesAndStepsAcrossWindowsItNeverShowed(t *testing.T) 
 	}
 }
 
+// A thumbnail is one throttled request to Google, and the browser goes on loading an image
+// after its cell has left the document. A jump along the rail must let go of the pictures it
+// left behind, or five jumps put five screens nobody is looking at ahead of the one they are.
+func TestAJumpAlongTheRailLetsGoOfTheThumbnailsItLeftBehind(t *testing.T) {
+	if os.Getenv("GPB_BROWSER") == "" {
+		t.Skip("set GPB_BROWSER=1 to drive a real browser")
+	}
+
+	server, _ := testServer(t)
+	google := &unhurriedThumbnails{inFlight: map[string]int{}}
+	server.images = google
+	seedAlbums(t, server, store.Album{ID: "years", Title: "Years of it"})
+	seedAWeekApart(t, server, "years", 450)
+
+	site := httptest.NewServer(server.Handler())
+	defer site.Close()
+	browser, done := openBrowser(t)
+	defer done()
+	logIn(t, browser, site.URL)
+	failOnScriptErrors(t, browser)
+
+	var inDocument []string
+	if err := chromedp.Run(browser,
+		chromedp.Navigate(site.URL+"/album/years"),
+		chromedp.WaitVisible(".grid.timeline .grid-cell[data-key]"),
+		chromedp.Sleep(time.Second),
+		chromedp.Evaluate(dragTheRailTo(0.5), nil),
+		chromedp.Sleep(time.Second),
+		chromedp.Evaluate(dragTheRailTo(0.9), nil),
+		chromedp.Sleep(2*time.Second),
+		chromedp.Evaluate(`Array.from(document.querySelectorAll('#grid img.thumb[src]')).map((image) => image.src.split('/').pop())`, &inDocument),
+	); err != nil {
+		t.Fatalf("jumping along the rail: %v", err)
+	}
+
+	shown := map[string]bool{}
+	for _, key := range inDocument {
+		shown[key] = true
+	}
+	inFlight, asked := google.snapshot()
+	if len(inFlight) == 0 || asked == 0 {
+		t.Fatalf("no thumbnail was ever asked for: %d in flight of %d asked", len(inFlight), asked)
+	}
+	for _, key := range inFlight {
+		if !shown[key] {
+			t.Errorf("Google is still being asked for %s, which is no longer on the page", key)
+		}
+	}
+	t.Logf("%d thumbnails asked for over two jumps, %d still in flight, %d on the page", asked, len(inFlight), len(inDocument))
+}
+
+// unhurriedThumbnails stands in for Google and never answers, so what remains in flight is
+// exactly what the browser has not let go of. Its keys are the tail of the seeded URLs.
+type unhurriedThumbnails struct {
+	mu       sync.Mutex
+	inFlight map[string]int
+	asked    int
+}
+
+func (u *unhurriedThumbnails) Thumbnail(ctx context.Context, baseURL string, w io.Writer) (int64, error) {
+	key := baseURL[strings.LastIndex(baseURL, "/")+1:]
+	u.mu.Lock()
+	u.inFlight[key]++
+	u.asked++
+	u.mu.Unlock()
+	<-ctx.Done()
+	u.mu.Lock()
+	u.inFlight[key]--
+	if u.inFlight[key] == 0 {
+		delete(u.inFlight, key)
+	}
+	u.mu.Unlock()
+	return 0, ctx.Err()
+}
+
+func (u *unhurriedThumbnails) snapshot() (inFlight []string, asked int) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	for key := range u.inFlight {
+		inFlight = append(inFlight, key)
+	}
+	return inFlight, u.asked
+}
+
 // seedAWeekApart fills an album with items captured a week apart, ending now, so the months
 // on its timeline are known from the count alone.
 func seedAWeekApart(t *testing.T, server *Server, albumID string, count int) {
@@ -135,7 +222,8 @@ func seedAWeekApart(t *testing.T, server *Server, albumID string, count int) {
 	for index := range count {
 		key := fmt.Sprintf("%s-%04d", albumID, index)
 		item := store.MediaItem{MediaKey: key, Filename: key + ".jpg",
-			CapturedAt: now.Add(-time.Duration(count-1-index) * 7 * 24 * time.Hour)}
+			ThumbnailURL: "https://photos.fife.usercontent.google.com/pw/" + key,
+			CapturedAt:   now.Add(-time.Duration(count-1-index) * 7 * 24 * time.Hour)}
 		if err := server.store.UpsertItem(item, now); err != nil {
 			t.Fatalf("seeding %s: %v", key, err)
 		}
