@@ -18,15 +18,20 @@ type Twin struct {
 // the best of them: one with the same bytes before one with the same name, and the largest
 // after that.
 func (s *Store) WrittenOffTwins() ([]Twin, error) {
+	const writtenOffWithAFile = `media_items.state = ? AND media_items.local_path IS NOT NULL
+		  AND copy.local_path IS NOT NULL`
 	rows, err := s.db.Query(`
-		SELECT media_items.media_key, copy.media_key,
-		       COALESCE(copy.sha256 = media_items.sha256, 0)
-		FROM media_items JOIN media_items copy ON `+copyStillHeld+`
-		WHERE media_items.state = ? AND media_items.local_path IS NOT NULL
-		  AND copy.local_path IS NOT NULL
-		ORDER BY media_items.captured_at, media_items.media_key,
-		         COALESCE(copy.sha256 = media_items.sha256, 0) DESC, copy.size_bytes DESC`,
-		string(StateMissingUpstream))
+		SELECT written_off, kept, same_bytes FROM (
+			SELECT media_items.media_key AS written_off, copy.media_key AS kept, 1 AS same_bytes,
+			       media_items.captured_at AS taken, copy.size_bytes AS kept_size
+			FROM media_items JOIN media_items copy ON `+sameBytesCopy+`
+			WHERE `+writtenOffWithAFile+`
+			UNION ALL
+			SELECT media_items.media_key, copy.media_key, 0, media_items.captured_at, copy.size_bytes
+			FROM media_items JOIN media_items copy ON `+sameNameCopy+`
+			WHERE `+writtenOffWithAFile+`)
+		ORDER BY taken, written_off, same_bytes DESC, kept_size DESC`,
+		string(StateMissingUpstream), string(StateMissingUpstream))
 	if err != nil {
 		return nil, fmt.Errorf("finding written-off copies: %w", err)
 	}

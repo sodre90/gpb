@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2 — 2026-09-14
+
+- **The Review page took nine seconds, and every other page waited behind it.** The list of
+  written-off copies 0.3.1 put on the page joined every write-off against every backed-up row,
+  with no index either side; on a library of 97,000 that was 8.9 s on one SQLite connection,
+  so the whole site stalled while anyone had Review open. Two indexes and the same rule in two
+  indexable halves bring it to 2 ms, and the review flag a write-off is given during a run is
+  faster by the same measure.
+
 ## 0.3.1 — 2026-09-14
 
 - **The written-off copies can be removed from the Review page.** A third section counts the

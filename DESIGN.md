@@ -1232,8 +1232,8 @@ of a bad mount is a worse outcome than the fault. The command exits non-zero whe
 anything, so a monthly cron entry needs no output parsing to notice.
 
 `gpb duplicates` (added 2026-09-14) is the one command that deletes, and the rule under which it
-does is deliberately the same one the review queue uses (`copyStillHeld`, one constant in the
-store): a written-off item is a *copy* when a `done` item holds the same sha256, or the same
+does is deliberately the same one the review queue uses (`sameBytesCopy` and `sameNameCopy`,
+two constants in the store, each with an index of its own since 0016): a written-off item is a *copy* when a `done` item holds the same sha256, or the same
 filename and capture second at a size at least as large. Google's listing carries a photo under
 a second key for days or weeks and then drops it — 145 of the first 300 write-offs in a library
 of 96,000 were such copies, 85 byte for byte and 60 as a smaller re-encode; 164 and 1.0 GB by

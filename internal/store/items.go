@@ -230,18 +230,24 @@ func (s *Store) MarkFailed(mediaKey string, cause error) error {
 // 60 as a smaller file with the same name and the same capture second. Losing one of two
 // copies is not a loss, so neither is asked about. The copy that stays has to be at least as
 // large: the day the larger one goes and the smaller survives is a question, and stays one.
-const reviewUnlessACopyRemains = `CASE WHEN EXISTS (
-	SELECT 1 FROM media_items copy WHERE ` + copyStillHeld + `) THEN 0 ELSE 1 END`
+const reviewUnlessACopyRemains = `CASE WHEN
+	EXISTS (SELECT 1 FROM media_items copy WHERE ` + sameBytesCopy + `)
+	OR EXISTS (SELECT 1 FROM media_items copy WHERE ` + sameNameCopy + `)
+	THEN 0 ELSE 1 END`
 
-// copyStillHeld is the join between media_items and a backed-up row, copy, that holds the
-// same photograph: the same bytes, or the same name taken in the same second and at least as
-// large. It is one rule in one place, so the review queue and the duplicates command cannot
-// disagree about what a copy is.
-const copyStillHeld = `copy.media_key != media_items.media_key AND copy.state = 'done'
-	  AND ((media_items.sha256 IS NOT NULL AND copy.sha256 = media_items.sha256)
-	    OR (media_items.filename != '' AND copy.filename = media_items.filename
-	        AND copy.captured_at = media_items.captured_at
-	        AND copy.size_bytes >= media_items.size_bytes))`
+// sameBytesCopy and sameNameCopy are the two ways a backed-up row, copy, holds the same
+// photograph as media_items: the same bytes, or the same name taken in the same second and at
+// least as large. They are the one rule in one place, so the review queue and the duplicates
+// command cannot disagree about what a copy is — and they are two halves rather than one OR
+// because each half has an index of its own (0016), and SQLite would not use either behind an
+// OR: one join took 9 s over a library of 97,000, and 2 ms as two.
+const (
+	sameBytesCopy = `copy.sha256 = media_items.sha256 AND media_items.sha256 IS NOT NULL
+	  AND copy.media_key != media_items.media_key AND copy.state = 'done'`
+	sameNameCopy = `copy.filename = media_items.filename AND copy.captured_at = media_items.captured_at
+	  AND copy.size_bytes >= media_items.size_bytes AND media_items.filename != ''
+	  AND copy.media_key != media_items.media_key AND copy.state = 'done'`
+)
 
 // MarkMissingUpstream flags an item that has vanished from Google. It never deletes: a
 // backup whose contents disappear because the source did is not a backup, so the local file
