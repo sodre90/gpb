@@ -58,6 +58,27 @@
 {{end}}
 {{end}}
 
+{{with .Copies}}{{if .Count}}
+<h2>Copies of photos still backed up</h2>
+<p class="muted">{{quantity .Count "written-off file"}}, {{.Size}} in all, {{if eq .Count 1}}is a copy{{else}}are copies{{end}}
+   of photos that are still backed up under another key — the same bytes, or the same name
+   taken in the same second with the copy that stays at least as large. These are the copies
+   that stay. Removing the written-off files re-reads each of these first and checks it against
+   its hash; one that does not check out keeps its twin. This is the one thing gpb ever deletes,
+   and it happens only when you press the button.</p>
+
+<form method="post" action="/review/copies">
+  <section class="card">
+    <div class="grid">
+      {{range .Cells}}{{template "gridcell" .Shown}}{{end}}
+    </div>
+    <div class="actions">
+      <button type="submit" name="decision" value="remove">Remove the {{quantity .Count "written-off file"}}</button>
+    </div>
+  </section>
+</form>
+{{end}}{{end}}
+
 <script src="/static/review.js" defer></script>
 <script src="/static/viewer.js" defer></script>
 

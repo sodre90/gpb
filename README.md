@@ -163,7 +163,8 @@ it says so. It exits non-zero when it found anything, so a monthly cron entry ne
 parsing to notice; `--repair` puts the damaged files back on the work list for the next run to
 fetch again, and deletes nothing.
 
-`duplicates` is the one thing that does delete, and only one kind of file. Google's listing
+`duplicates` is the one thing that does delete (the Review page offers the same list, with one
+button that does what `--delete` does), and only one kind of file. Google's listing
 sometimes carries a photo under a second key for a while and then drops it; the second copy was
 backed up while it was there, and is written off when it goes. When the photo is still backed up
 under the key that stayed — the same bytes, or the same name taken in the same second and at

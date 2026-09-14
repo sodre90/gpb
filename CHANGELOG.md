@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1 — 2026-09-14
+
+- **The written-off copies can be removed from the Review page.** A third section counts the
+  written-off files whose photo is still backed up under another key, shows the copies that
+  stay, and has one button that does what `gpb duplicates --delete` does: each kept copy is
+  re-read and checked against its hash before its twin is unlinked, one that does not check out
+  keeps its twin, and the notice afterwards says what was removed and what was left alone.
+  Nothing to tick — the rule has already decided which files qualify — and nothing runs on
+  its own.
+
 ## 0.3.0 — 2026-09-14
 
 - **Find photos by place.** Type a town, an island or a country into the box above the Photos

@@ -863,7 +863,10 @@ srv := &http.Server{Addr: cfg.Web.Listen, Handler: protection.Handler(mux)}
 - **`/review` — the review queue.** All `needs_review` items, grouped by album, as a
   thumbnail grid with two actions per item (or per selection): **approve** (mark selected,
   download next run) and **dismiss** (leave unselected). Both clear the flag. This is the
-  workflow for items appearing in `picked` albums after curation.
+  workflow for items appearing in `picked` albums after curation. Items Google has lost are a
+  second section with one verb, **acknowledge**, and since 2026-09-14 a third section offers
+  the written-off copies `gpb duplicates` would list (§14), with one button that does what
+  `--delete` does — the page's only action that touches a file, and it never runs unasked.
 - **`/runs` — sync status and history.** The `sync_runs` table rendered newest-first with
   outcome, counts, bytes, error; a live progress block (current phase, items done/total)
   while a run is active.

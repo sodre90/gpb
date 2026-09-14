@@ -1,9 +1,14 @@
 package web
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -341,5 +346,63 @@ func TestItemsInADeclinedAlbumNeverReachTheQueue(t *testing.T) {
 	body := get(handler, "/review", cookie).Body.String()
 	if strings.Contains(body, "Declined album") {
 		t.Errorf("an album nobody follows appeared in the review queue; body was:\n%s", body)
+	}
+}
+
+// A written-off file whose photo is still backed up is the page's third kind of item, shown as
+// the copy that stays, and the one button removes the written-off files the way the command
+// does: nothing is ticked, nothing is partial, and the notice says what happened.
+func TestTheCopiesSectionRemovesWrittenOffFilesWithOneButton(t *testing.T) {
+	server, _ := testServer(t)
+	handler := server.Handler()
+	cookie := login(t, handler)
+	now := time.Now()
+
+	seedAlbums(t, server, store.Album{ID: "beach", Title: "Beach", ItemCount: 2})
+	pool := t.TempDir()
+	const body = "the photo of the beach"
+	digest := sha256.Sum256([]byte(body))
+	for _, key := range []string{"kept", "twin"} {
+		path := filepath.Join(pool, key+".jpg")
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		seedPickedItem(t, server, "beach", key, now)
+		item := store.MediaItem{MediaKey: key, Filename: "IMAG0003.jpg", LocalPath: path,
+			SizeBytes: int64(len(body)), SHA256: hex.EncodeToString(digest[:])}
+		if err := server.store.MarkDownloaded(item, now); err != nil {
+			t.Fatalf("marking %s downloaded: %v", key, err)
+		}
+	}
+	if err := server.store.MarkMissingUpstream("twin", now); err != nil {
+		t.Fatalf("writing off the twin: %v", err)
+	}
+
+	page := get(handler, "/review", cookie).Body.String()
+	if !strings.Contains(page, "Copies of photos still backed up") || !strings.Contains(page, "1 written-off file,") {
+		t.Fatalf("the page does not offer the copy; body was:\n%s", page)
+	}
+	if !strings.Contains(page, `data-key="kept"`) || strings.Contains(page, `data-key="twin"`) {
+		t.Errorf("the section should show the copy that stays, not the one that goes; body was:\n%s", page)
+	}
+	if strings.Contains(page, `name="resolve"`) {
+		t.Error("the copies section offers checkboxes, but the rule has already decided which files qualify")
+	}
+
+	recorder := postForm(handler, "/review/copies", url.Values{"decision": {"remove"}}, cookie)
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("removing returned %d, want 303", recorder.Code)
+	}
+	if location := recorder.Header().Get("Location"); !strings.Contains(location, "1+written-off+file") && !strings.Contains(location, "1%20written-off%20file") {
+		t.Errorf("the notice after removing is %q", location)
+	}
+	if _, err := os.Stat(filepath.Join(pool, "twin.jpg")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the written-off file is still there (%v)", err)
+	}
+	if _, err := os.Stat(filepath.Join(pool, "kept.jpg")); err != nil {
+		t.Error("the copy that stays went too")
+	}
+	if page := get(handler, "/review", cookie).Body.String(); strings.Contains(page, "Copies of photos still backed up") {
+		t.Error("the section is still offered after the copies went")
 	}
 }

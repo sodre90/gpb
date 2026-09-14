@@ -13,7 +13,7 @@ is written down there with the measurement that produced it.
 
 ```bash
 go build ./...
-go test ./...              # 539 tests across 15 packages
+go test ./...              # 540 tests across 15 packages
 cd spike && go test ./...  # the Phase 0 protocol spike, a separate module
 ```
 

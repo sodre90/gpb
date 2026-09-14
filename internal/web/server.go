@@ -170,6 +170,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("GET /review", s.requireSession(http.HandlerFunc(s.handleReview)))
 	mux.Handle("POST /review/resolve", s.requireSession(http.HandlerFunc(s.handleReviewResolve)))
+	mux.Handle("POST /review/copies", s.requireSession(http.HandlerFunc(s.handleReviewRemoveCopies)))
 
 	mux.Handle("GET /settings", s.requireSession(http.HandlerFunc(s.handleSettings)))
 	mux.Handle("POST /settings", s.requireSession(http.HandlerFunc(s.handleSettingsSave)))
