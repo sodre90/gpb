@@ -53,7 +53,7 @@ func (c *Client) Thumbnail(ctx context.Context, baseURL string, w io.Writer) (in
 
 	response, err := c.downloads.Do(request)
 	if err != nil {
-		return 0, fmt.Errorf("fetching a thumbnail: %w", err)
+		return 0, fmt.Errorf("fetching a thumbnail: %w", withoutAddress(err))
 	}
 	defer response.Body.Close()
 

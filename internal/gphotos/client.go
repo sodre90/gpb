@@ -137,7 +137,7 @@ func (c *Client) post(ctx context.Context, endpoint, body string) (string, error
 
 	response, err := c.http.Do(request)
 	if err != nil {
-		return "", fmt.Errorf("batchexecute request: %w", err)
+		return "", fmt.Errorf("batchexecute request: %w", withoutAddress(err))
 	}
 	defer response.Body.Close()
 
@@ -212,4 +212,23 @@ func retryAfter(response *http.Response) time.Duration {
 		}
 	}
 	return 0
+}
+
+// withoutAddress keeps what failed and why, and drops the address it failed at. net/http puts
+// the whole request URL into its errors, and for a download that URL is signed: whoever reads
+// the log line or the item's recorded error could fetch the photograph with it.
+func withoutAddress(err error) error {
+	var requestErr *url.Error
+	if !errors.As(err, &requestErr) {
+		return err
+	}
+	return fmt.Errorf("%s to %s: %w", requestErr.Op, hostOnly(requestErr.URL), requestErr.Err)
+}
+
+func hostOnly(address string) string {
+	parsed, err := url.Parse(address)
+	if err != nil || parsed.Host == "" {
+		return "an address that does not parse"
+	}
+	return parsed.Host
 }

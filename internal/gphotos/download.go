@@ -124,7 +124,7 @@ func (c *Client) Fetch(ctx context.Context, signedURL string, offset int64, w io
 
 	response, err := transport.Do(request)
 	if err != nil {
-		return Download{}, fmt.Errorf("fetching the original: %w", err)
+		return Download{}, fmt.Errorf("fetching the original: %w", withoutAddress(err))
 	}
 	defer response.Body.Close()
 

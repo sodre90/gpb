@@ -1,6 +1,7 @@
 package gphotos
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -697,5 +698,28 @@ func TestHTTPErrorRetryPolicy(t *testing.T) {
 		if got := (&HTTPError{StatusCode: status}).Retryable(); got != want {
 			t.Errorf("HTTP %d retryable = %v, want %v", status, got, want)
 		}
+	}
+}
+
+// A signed URL is a credential for the file it names, and a failed download's error is logged
+// and kept on the item. net/http writes the whole URL into its errors, so this checks that none
+// of it survives past the host — while the cause stays matchable for the retry decisions.
+func TestAFailedDownloadDoesNotRepeatItsSignedURL(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	client := &Client{}
+	_, err := client.Fetch(ctx, "https://video-downloads.googleusercontent.com/SIGNATURE-abc123?sig=SECRET", 0, io.Discard)
+	if err == nil {
+		t.Fatal("a cancelled download succeeded")
+	}
+	if strings.Contains(err.Error(), "SIGNATURE") || strings.Contains(err.Error(), "SECRET") {
+		t.Errorf("the error repeats the signed URL: %v", err)
+	}
+	if !strings.Contains(err.Error(), "video-downloads.googleusercontent.com") {
+		t.Errorf("the error no longer names the host it failed at: %v", err)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("the cause is no longer matchable: %v", err)
 	}
 }
