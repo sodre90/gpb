@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1 — 2026-09-23
+
+- **The overview says what the backup takes on disk, and how much of it is video.** The size
+  was one small grey figure under the meter; it is now a figure beside the counts, with what the
+  photos and what the videos take under it. A photo held under two keys is counted once, and a
+  motion photo counts as a photo.
+
 ## 0.4.0 — 2026-09-23
 
 - **A photo held under two keys is now one file on disk.** Google gives one photograph a key in
