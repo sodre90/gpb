@@ -89,8 +89,10 @@ gh release list --limit 5
 
 step "Image (linux/amd64: Google ships Chrome for Linux on that architecture only)"
 docker buildx build --platform linux/amd64 -t "$image:$version" -t "$image:latest" --push .
-docker buildx imagetools inspect "$image:$version" | grep -q 'linux/amd64' \
-  || fail "$image:$version was pushed without a linux/amd64 manifest"
+# Read whole before grepping: grep -q exits at the first match, and under pipefail the SIGPIPE
+# that leaves imagetools with fails a check that passed (0.4.0).
+manifest=$(docker buildx imagetools inspect "$image:$version")
+grep -q 'linux/amd64' <<<"$manifest" || fail "$image:$version was pushed without a linux/amd64 manifest"
 
 echo
 echo "Released gpb $version. The box still runs the previous image until its Image= line moves."
