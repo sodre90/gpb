@@ -159,9 +159,10 @@ gpb duplicates [--delete]  list the written-off files that are copies of photos 
 
 `verify` is the one nothing else does: a run notices a file that has *gone*, but a file quietly
 rotted by a failing disk keeps its name, its size and its place in the pool, and only re-reading
-it says so. It exits non-zero when it found anything, so a monthly cron entry needs no output
-parsing to notice; `--repair` puts the damaged files back on the work list for the next run to
-fetch again, and deletes nothing.
+it says so. The daemon runs it once a month on its own and fires the notify hook as
+`verify_problems` when it finds damage; run by hand, it exits non-zero when it found anything, so
+a script needs no output parsing to notice. `--repair` puts the damaged files back on the work
+list for the next run to fetch again, and deletes nothing.
 
 `duplicates` is the one thing that does delete (the Review page offers the same list, with one
 button that does what `--delete` does), and only one kind of file. Google's listing

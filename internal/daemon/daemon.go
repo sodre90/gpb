@@ -97,6 +97,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	go d.keepalive(ctx)
 	go d.backUpOnSchedule(ctx)
 	go d.copyDatabaseOnSchedule(ctx)
+	go d.verifyOnSchedule(ctx)
 	go d.locateFiles(ctx)
 	go d.bridge.Run(ctx)
 

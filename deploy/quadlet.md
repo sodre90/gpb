@@ -179,9 +179,14 @@ the volume and survive. Chrome is fetched once and then left alone, so an instal
 year is running the browser it downloaded a year ago — `rm -rf ~/gpb/data/chrome` and restart to
 take the current one.
 
-`verify` is worth a monthly timer once the library is large: it reads every file, so it takes as
-long as reading the pool takes, and it exits non-zero if anything has rotted — which is all a
-systemd timer or a cron entry needs to page you. The daemon keeps its own weekly copy of the
+The daemon runs `verify` itself once a month, an hour or more after it starts, and never starts
+one during a backup — though a backup that falls due mid-sweep still runs, sharing the disk. It
+reads every file, so it takes as long as reading the pool takes; it repairs nothing, and if
+anything has rotted it fires the notify hook as `verify_problems` and leaves
+`gpb verify --repair` to you. `~/gpb/data/verify.last` says when the last one finished and what it
+found — delete it to have the next one start within the hour.
+
+The daemon keeps its own weekly copy of the
 database at `~/gpb/data/state.backup.db`; whatever backs up the host should pick that file up
 rather than the live `state.db`, which is in WAL mode and is not a copy on its own. The container reports `unhealthy` until the first
 Google sign-in — the health command asks after the session, not the socket, and a fresh profile

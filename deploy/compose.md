@@ -126,10 +126,16 @@ certificate live on the volume and survive. Chrome is fetched once and then left
 install that has been running for a year is running the browser it downloaded a year ago — to
 take the current one, `rm -rf <data>/chrome` and restart, and the next start fetches it again.
 
-`verify` is worth a monthly cron entry once the library is large: it reads every file, so it takes
-as long as reading the pool takes, and it exits non-zero if anything has rotted. The daemon keeps
-its own weekly copy of the database at `<data>/state.backup.db` — that one needs nothing from you
-beyond letting whatever backs up the host pick the file up.
+The daemon runs `verify` itself once a month, an hour or more after it starts, and never starts
+one during a backup — though a backup that falls due mid-sweep still runs, sharing the disk. It
+reads every file, so it takes as long as reading the pool takes; it repairs nothing, and if
+anything has rotted it fires the notify hook as `verify_problems` and leaves
+`gpb verify --repair` to you. `<data>/verify.last` says when the last one finished and what it
+found — delete it to have the next one start within the hour.
+
+The daemon keeps its own weekly copy of the database at
+`<data>/state.backup.db` — that one needs nothing from you beyond letting whatever backs up the
+host pick the file up.
 
 ## Two things that look like faults and are not
 

@@ -1231,6 +1231,17 @@ volume that came up late — is reported and never requeued: re-downloading a li
 of a bad mount is a worse outcome than the fault. The command exits non-zero when it found
 anything, so a monthly cron entry needs no output parsing to notice.
 
+*The daemon runs it monthly itself (added 2026-09-22),* because the container has no cron and
+the advice above assumed the reader would build one. Same shape as the database copy below: an
+hourly tick asks the age of `/data/verify.last`, written only when a sweep finishes and holding
+its one-line report. It never repairs — whether the fault is the files or the mount is a call for
+the person the `verify_problems` notification reaches — and it never starts while a backup runs,
+since the two would share a disk and one of them is hours of reading. The reverse is allowed: a
+backup that falls due mid-sweep starts anyway and shares the disk, because the backup is the job
+and the sweep is only a check on it. The first question is asked
+an hour after startup, not at it, so a fresh install or an upgrade does not begin by reading the
+whole pool alongside its first warmup.
+
 `gpb duplicates` (added 2026-09-14) is the one command that deletes, and the rule under which it
 does is deliberately the same one the review queue uses (`sameBytesCopy` and `sameNameCopy`,
 two constants in the store, each with an index of its own since 0016): a written-off item is a *copy* when a `done` item holds the same sha256, or the same

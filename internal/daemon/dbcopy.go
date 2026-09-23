@@ -55,16 +55,22 @@ func (d *Daemon) copyDatabaseIfOwed(now time.Time) {
 }
 
 func databaseCopyOwed(path string, now time.Time) bool {
+	return fileOlderThan(path, databaseCopyInterval, now)
+}
+
+// fileOlderThan treats a file that is not there as infinitely old, and one whose age cannot be
+// read as not old at all. Acting on a stat that failed would repeat an hourly-checked job every
+// hour — rewriting the one good database copy, or re-reading the whole pool — which is the
+// opposite of what either is for.
+func fileOlderThan(path string, age time.Duration, now time.Time) bool {
 	info, err := os.Stat(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		return true
 	case err != nil:
-		// Unreadable is not overdue. Copying on the strength of a stat that failed would rewrite
-		// the one good copy every hour, which is the opposite of what this is for.
 		log.Printf("daemon: could not read the age of %s: %v", path, err)
 		return false
 	default:
-		return now.Sub(info.ModTime()) >= databaseCopyInterval
+		return now.Sub(info.ModTime()) >= age
 	}
 }
