@@ -627,6 +627,30 @@ func TestTheBackupSetCountsAPhotoOnceHoweverManyAlbumsHoldIt(t *testing.T) {
 	}
 }
 
+// Two keys for one photograph are two photos backed up and one file on disk: the pool keeps them
+// as hardlinks, and the overview shows this figure as what is on disk.
+func TestTheBackupSetMeasuresAPhotoHeldUnderTwoKeysOnce(t *testing.T) {
+	store := openTestStore(t)
+	seedFollowedAlbum(t, store, SyncAll, "album-key", "timeline-key", "other-key")
+	for key, sha := range map[string]string{"album-key": "same", "timeline-key": "same", "other-key": "other"} {
+		item := MediaItem{MediaKey: key, Filename: key + ".jpg", LocalPath: "/pool/" + key + ".jpg", SizeBytes: 1000, SHA256: sha}
+		if err := store.MarkDownloaded(item, noon); err != nil {
+			t.Fatalf("marking %s downloaded: %v", key, err)
+		}
+	}
+
+	set, err := store.BackupSet()
+	if err != nil {
+		t.Fatalf("summarising the backup set: %v", err)
+	}
+	if set.Known != 3 || set.Done != 3 {
+		t.Errorf("the set counts %d known and %d done, want every key counted", set.Known, set.Done)
+	}
+	if set.Bytes != 2000 {
+		t.Errorf("the set measures %d bytes, want the shared photo once", set.Bytes)
+	}
+}
+
 // An album nobody asked for must not appear in the totals, and neither must its items: the whole
 // promise of the summary is that it describes what a run would actually fetch.
 func TestTheBackupSetIgnoresAlbumsNobodyFollows(t *testing.T) {

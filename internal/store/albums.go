@@ -233,13 +233,21 @@ func (s *Store) BackupSet() (BackupSet, error) {
 	}
 	set.Library = library > 0
 
+	// Grouped by bytes so a photo held under several keys, which the pool keeps as one hardlinked
+	// file, is measured once: the figure is shown as what is on disk. The grouping costs about
+	// three quarters again over counting alone — 125 ms to 220 ms at 97,000 items on a laptop,
+	// 2026-09-23 — against 305 ms for subtracting the repeats in a second query.
 	err = s.db.QueryRow(`
-		SELECT COUNT(*),
-			COALESCE(SUM(CASE WHEN state = 'done' THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN state IN ('discovered', 'queued', 'downloading') THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN state = 'failed' THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN state = 'done' THEN size_bytes ELSE 0 END), 0)
-		FROM media_items WHERE `+inTheSyncSet).
+		SELECT COALESCE(SUM(known), 0), COALESCE(SUM(done), 0), COALESCE(SUM(pending), 0),
+			COALESCE(SUM(failed), 0), COALESCE(SUM(done_bytes), 0)
+		FROM (
+			SELECT COUNT(*) AS known,
+				SUM(CASE WHEN state = 'done' THEN 1 ELSE 0 END) AS done,
+				SUM(CASE WHEN state IN ('discovered', 'queued', 'downloading') THEN 1 ELSE 0 END) AS pending,
+				SUM(CASE WHEN state = 'failed' THEN 1 ELSE 0 END) AS failed,
+				MAX(CASE WHEN state = 'done' THEN size_bytes END) AS done_bytes
+			FROM media_items WHERE `+inTheSyncSet+`
+			GROUP BY COALESCE(sha256, media_key))`).
 		Scan(&set.Known, &set.Done, &set.Pending, &set.Failed, &set.Bytes)
 	if err != nil {
 		return BackupSet{}, fmt.Errorf("summarising the backup set: %w", err)
