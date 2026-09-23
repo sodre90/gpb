@@ -28,8 +28,10 @@ type Runs interface {
 	StartSync(reason string) error
 	StartRefresh(reason string) error
 	StartAlbumListing(albumID, reason string) error
+	StartLinking(reason string) error
 	Activity() string
 	Progress() syncer.Progress
+	SeparateCopies() (syncer.Linking, bool)
 }
 
 // MQTTBridge is the Home Assistant bridge as the settings page needs it: something that can say
@@ -171,6 +173,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /review", s.requireSession(http.HandlerFunc(s.handleReview)))
 	mux.Handle("POST /review/resolve", s.requireSession(http.HandlerFunc(s.handleReviewResolve)))
 	mux.Handle("POST /review/copies", s.requireSession(http.HandlerFunc(s.handleReviewRemoveCopies)))
+	mux.Handle("POST /review/link", s.requireSession(http.HandlerFunc(s.handleReviewLinkCopies)))
 
 	mux.Handle("GET /settings", s.requireSession(http.HandlerFunc(s.handleSettings)))
 	mux.Handle("POST /settings", s.requireSession(http.HandlerFunc(s.handleSettingsSave)))

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gpb/internal/store"
+	"gpb/internal/syncer"
 )
 
 // flagNewForReview puts an item into the state a new arrival in a 'picked' album is left in:
@@ -404,5 +405,47 @@ func TestTheCopiesSectionRemovesWrittenOffFilesWithOneButton(t *testing.T) {
 	}
 	if page := get(handler, "/review", cookie).Body.String(); strings.Contains(page, "Copies of photos still backed up") {
 		t.Error("the section is still offered after the copies went")
+	}
+}
+
+func TestTheLinkingSectionHandsThePassToTheRunner(t *testing.T) {
+	server, _ := testServer(t)
+	handler := server.Handler()
+	cookie := login(t, handler)
+	runsOf(server).copies = syncer.Linking{Photos: 3, Separate: 4, Held: 12_000_000}
+
+	page := get(handler, "/review", cookie).Body.String()
+	if !strings.Contains(page, "3 photos held under more than one key are") || !strings.Contains(page, "4 extra files, 12.0 MB") {
+		t.Fatalf("the page does not count the copies; body was:\n%s", page)
+	}
+	if strings.Contains(page, "Nothing is waiting") {
+		t.Error("the page says nothing is waiting while it offers to link copies")
+	}
+
+	recorder := postForm(handler, "/review/link", url.Values{}, cookie)
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("linking returned %d, want 303", recorder.Code)
+	}
+	if started := runsOf(server).started; len(started) != 1 || started[0] != "link:web ui" {
+		t.Errorf("the runner was asked for %v, want one linking pass", started)
+	}
+}
+
+func TestTheLinkingButtonWaitsForWhateverIsRunning(t *testing.T) {
+	server, _ := testServer(t)
+	handler := server.Handler()
+	cookie := login(t, handler)
+	runs := runsOf(server)
+	runs.copies = syncer.Linking{Photos: 1, Separate: 1, Held: 1000}
+	runs.activity = "sync"
+
+	page := get(handler, "/review", cookie).Body.String()
+	if strings.Contains(page, `action="/review/link"`) || !strings.Contains(page, "while sync is in progress") {
+		t.Errorf("the button is offered while a sync holds the runner; body was:\n%s", page)
+	}
+
+	runs.err = syncer.ErrRunInProgress
+	if recorder := postForm(handler, "/review/link", url.Values{}, cookie); recorder.Code != http.StatusConflict {
+		t.Errorf("linking while busy returned %d, want 409", recorder.Code)
 	}
 }

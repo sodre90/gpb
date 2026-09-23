@@ -710,11 +710,16 @@ Host side these are bind mounts from local disk on the Fedora box — proposed
   so removing either (a write-off cleaned up by `gpb duplicates --delete`, say) must leave the
   other, which is exactly what a hardlink does. Each key keeps its own row and its own name. A
   link is made under a temporary name and renamed over the target, so a name is never missing;
-  `gpb duplicates --link` does the same for copies made before this existed, and `verify` hashes
-  each file once however many names it has. Two workers that fetch the same bytes in the same
-  moment both miss each other and commit two files; the next `--link` makes them one. Anything
-  that copies the pool elsewhere needs to preserve hardlinks (`rsync -H`) or it will store the
-  shared photos twice again.
+  and `verify` hashes each file once however many names it has. Two workers that fetch the same
+  bytes in the same moment both miss each other and commit two files, so every backup ends by
+  linking whatever copies are still separate files — holding the run's slot and its lock, since
+  it renames over pool names — and the first backup after an upgrade converts every copy an older
+  release made, hours of reading on a large library, cut short and resumed if it has to be. The
+  Review page's button and `gpb duplicates --link` do the same pass on demand. The page shows a
+  count the runner keeps rather than one it makes: counting took 0.66 s of the store's single
+  connection at 97,000 items (measured 2026-09-23), which is the Review page stall of 0.3.2 over
+  again. Anything that copies the pool elsewhere needs to preserve hardlinks (`rsync -H`) or it
+  will store the shared photos twice again.
 - **Write protocol:** download to `/photos/.tmp/<media_key>.part`, hash while streaming,
   verify length against the listing metadata (and Content-Length), `fsync`, then `rename(2)`
   into the pool and update the DB row. The rename is the commit; a crash leaves only a

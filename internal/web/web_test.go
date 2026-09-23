@@ -145,11 +145,19 @@ type fakeRuns struct {
 	started  []string
 	activity string
 	progress syncer.Progress
+	copies   syncer.Linking
 	err      error
 }
 
 func (f *fakeRuns) StartSync(reason string) error    { return f.record("sync", reason) }
 func (f *fakeRuns) StartRefresh(reason string) error { return f.record("refresh", reason) }
+func (f *fakeRuns) StartLinking(reason string) error { return f.record("link", reason) }
+
+func (f *fakeRuns) SeparateCopies() (syncer.Linking, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.copies, true
+}
 
 func (f *fakeRuns) StartAlbumListing(albumID, reason string) error {
 	return f.record("list:"+albumID, reason)

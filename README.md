@@ -185,10 +185,12 @@ reads as something else, keeps its twin: the twin may be the only good copy left
 The other way a photo ends up on the disk twice is not a mistake of Google's listing but a habit
 of its naming: the same photograph has one key in an album and another on the library timeline,
 so following both used to fetch it twice — 626 GB of the pool this was built against. A download
-that hashes to bytes already held now becomes a second name for that file, a hardlink, and
-`gpb duplicates` counts the copies made before that; `--link` re-reads both and makes each pair
-one file. Whatever copies the pool elsewhere should keep hardlinks (`rsync -H`), or the copy
-stores those photos twice.
+that hashes to bytes already held now becomes a second name for that file, a hardlink, and every
+backup ends by linking the copies still kept as separate files — both are re-read and checked
+against their hashes first. The first backup after upgrading converts everything an older release
+made, which on a large library is hours of reading; the Review page counts what is left and has a
+button to do it now, and so does `gpb duplicates --link`. Whatever copies the pool elsewhere
+should keep hardlinks (`rsync -H`), or the copy stores those photos twice.
 
 Browser login works on macOS too, with one difference: instead of the embedded noVNC canvas,
 Chrome opens on your own screen and the web UI tells you to sign in there and come back. The VNC

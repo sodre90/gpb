@@ -15,13 +15,14 @@ import (
 // one Google has lost is theirs only to acknowledge. Answering both with one button would mean
 // "approve" deciding to re-download something that no longer exists upstream.
 type reviewView struct {
-	New    []reviewGroup
-	Gone   []reviewGroup
-	Copies reviewCopies
+	New     []reviewGroup
+	Gone    []reviewGroup
+	Copies  reviewCopies
+	Linking reviewLinking
 }
 
 func (v reviewView) Empty() bool {
-	return len(v.New) == 0 && len(v.Gone) == 0 && v.Copies.Count == 0
+	return len(v.New) == 0 && len(v.Gone) == 0 && v.Copies.Count == 0 && v.Linking.Separate == 0
 }
 
 // reviewCopies is the third thing the page can offer, and the only one that touches a file:
@@ -34,6 +35,16 @@ type reviewCopies struct {
 	Cells []itemCell
 }
 
+// reviewLinking is photos held under two keys and kept as two files, which linking makes one file
+// with a name for each. No cells: on the library this was built against there were 20,795 of
+// them. Activity is whatever holds the runner, since linking cannot start until it finishes.
+type reviewLinking struct {
+	Photos   int
+	Separate int
+	Size     string
+	Activity string
+}
+
 type reviewGroup struct {
 	AlbumID string
 	Title   string
@@ -41,6 +52,10 @@ type reviewGroup struct {
 }
 
 func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
+	s.renderReview(w, r, http.StatusOK, "")
+}
+
+func (s *Server) renderReview(w http.ResponseWriter, r *http.Request, code int, problem string) {
 	view, err := s.reviewView()
 	if err != nil {
 		log.Printf("web: building the review queue: %v", err)
@@ -49,8 +64,9 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := s.page(r, "Review")
+	data.Error = problem
 	data.Data = view
-	render(w, http.StatusOK, "review", data)
+	render(w, code, "review", data)
 }
 
 func (s *Server) reviewView() (reviewView, error) {
@@ -66,7 +82,17 @@ func (s *Server) reviewView() (reviewView, error) {
 	if err != nil {
 		return reviewView{}, err
 	}
-	return reviewView{New: groupsFor(fresh), Gone: groupsFor(gone), Copies: copiesFor(twins)}, nil
+	return reviewView{New: groupsFor(fresh), Gone: groupsFor(gone), Copies: copiesFor(twins), Linking: s.linkingView()}, nil
+}
+
+func (s *Server) linkingView() reviewLinking {
+	counted, _ := s.runs.SeparateCopies()
+	return reviewLinking{
+		Photos:   counted.Photos,
+		Separate: counted.Separate,
+		Size:     humanBytes(counted.Held),
+		Activity: s.runs.Activity(),
+	}
 }
 
 func copiesFor(twins []store.Twin) reviewCopies {
@@ -98,6 +124,17 @@ func (s *Server) handleReviewRemoveCopies(w http.ResponseWriter, r *http.Request
 	}
 	log.Printf("review: %s", cleanup)
 	http.Redirect(w, r, "/review?notice="+url.QueryEscape(sentence(cleanup.String())), http.StatusSeeOther)
+}
+
+// handleReviewLinkCopies hands the pass to the runner rather than running it inside the request,
+// as removing the written-off copies does: it re-reads both copies of every photo it links, which
+// on the library this was built against is over a terabyte.
+func (s *Server) handleReviewLinkCopies(w http.ResponseWriter, r *http.Request) {
+	s.startRun(w, r, s.runs.StartLinking, s.renderReview, func() {
+		http.Redirect(w, r, "/review?notice="+url.QueryEscape("Linking the copies has started. It re-reads "+
+			"every one first, so it takes about as long as reading them twice; this page counts them "+
+			"again when it is done."), http.StatusSeeOther)
+	})
 }
 
 func sentence(text string) string {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"gpb/internal/config"
+	"gpb/internal/engine"
 	"gpb/internal/store"
 	"gpb/internal/syncer"
 )
@@ -16,7 +17,8 @@ import (
 // anything, which is why it lists by default. A photo held under two live keys, which Google hands
 // out for an album and the timeline alike, is counted, and with --link made one file with two
 // names. Like verify it touches the database and the pool alone, so it can run while the daemon
-// is up.
+// is up — though --link takes the run lock, because the daemon links the same names after every
+// backup.
 func runDuplicates(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("duplicates", flag.ExitOnError)
 	remove := flags.Bool("delete", false, "remove the written-off copies rather than list them")
@@ -28,6 +30,14 @@ func runDuplicates(ctx context.Context, args []string) error {
 	cfg, err := config.Load(config.DataDir())
 	if err != nil {
 		return err
+	}
+
+	if *link {
+		unlock, err := engine.LockRun(cfg)
+		if err != nil {
+			return err
+		}
+		defer unlock()
 	}
 
 	return withStore(cfg, func(db *store.Store) error {

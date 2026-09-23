@@ -98,6 +98,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	go d.backUpOnSchedule(ctx)
 	go d.copyDatabaseOnSchedule(ctx)
 	go d.verifyOnSchedule(ctx)
+	go d.runner.CountCopies(ctx)
 	go d.locateFiles(ctx)
 	go d.bridge.Run(ctx)
 

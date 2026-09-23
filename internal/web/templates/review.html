@@ -79,6 +79,27 @@
 </form>
 {{end}}{{end}}
 
+{{with .Linking}}{{if .Separate}}
+<h2>Photos kept as more than one file</h2>
+<section class="card">
+  <p>{{quantity .Photos "photo"}} held under more than one key {{if eq .Photos 1}}is{{else}}are{{end}}
+     still kept as separate files — {{quantity .Separate "extra file"}}, {{.Size}}.</p>
+  <p class="muted">Google names a photo differently in an album and on the library timeline, and
+     an older release downloaded it once for each name. Linking makes every copy another name for
+     one file, so each album still holds the photo and the disk holds it once. Both copies are
+     re-read and checked against their hashes first; one that does not check out is left as it
+     is. gpb does this after every backup on its own — the button does it now, and takes about as
+     long as reading these files twice.</p>
+  <div class="actions">
+    {{with .Activity}}
+      <p class="muted">Nothing new can start while {{.}} is in progress; the button comes back when it has finished.</p>
+    {{else}}
+      <form method="post" action="/review/link"><button type="submit">Link the copies</button></form>
+    {{end}}
+  </div>
+</section>
+{{end}}{{end}}
+
 <script src="/static/review.js" defer></script>
 <script src="/static/viewer.js" defer></script>
 

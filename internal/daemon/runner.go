@@ -20,6 +20,8 @@ import (
 // has hung for half a day is stuck, and holding the slot forever would block every later one.
 const runTimeout = 12 * time.Hour
 
+const copyLinking = "copy linking"
+
 // Runner owns the one-run-at-a-time rule. The daemon and the web UI both ask it for work,
 // and it is the only thing in the process that starts a sync, so the guard has nowhere to
 // leak from.
@@ -39,6 +41,12 @@ type Runner struct {
 	// nil between runs and for the moment a claimed run spends connecting to Google.
 	current  *syncer.Syncer
 	inFlight sync.WaitGroup
+
+	// copies is the last count of photos kept as separate files, held here because counting
+	// takes the store's one connection for longer than a page may: 0.66 s at 97,000 items on a
+	// laptop, measured 2026-09-23. It is recounted after every linking pass.
+	copies        syncer.Linking
+	copiesCounted bool
 }
 
 func NewRunner(cfg config.Config, manager *auth.Manager, db *store.Store) *Runner {
@@ -55,8 +63,72 @@ func (r *Runner) StartSync(reason string) error {
 
 		r.reportIfOutOfDisk(err)
 		r.relinkAlbums()
+		r.linkRepeatedCopies(ctx)
 		return err
 	})
+}
+
+// StartLinking makes each photo held as separate files under different keys one file, the pass a
+// backup ends with, on its own. It asks nothing of Google, so it takes the pool lock but never
+// starts a browser.
+func (r *Runner) StartLinking(reason string) error {
+	return r.launch(copyLinking, reason, func(ctx context.Context) error {
+		unlock, err := engine.LockRun(r.cfg)
+		if err != nil {
+			return err
+		}
+		defer unlock()
+
+		r.linkRepeatedCopies(ctx)
+		return nil
+	})
+}
+
+// linkRepeatedCopies runs after every backup because a run can still leave a second copy behind —
+// two workers that fetch the same bytes at once each find nothing held yet — and the first pass
+// after an upgrade converts every copy an older release made. It reads both copies of each photo
+// it links, so that first pass is hours on a large library; one cut short is finished by the next.
+// A failure is logged and not returned, for relinkAlbums' reason.
+func (r *Runner) linkRepeatedCopies(ctx context.Context) {
+	r.nowDoing(copyLinking)
+	linking, err := syncer.LinkCopies(ctx, r.store, true)
+	for _, refusal := range linking.Refusals {
+		log.Printf("daemon: left as a separate copy: %s", refusal)
+	}
+	if err != nil {
+		log.Printf("daemon: copy linking stopped with %d copies linked: %v", linking.Linked, err)
+		return
+	}
+	log.Printf("daemon: copy linking — %s", linking)
+	r.CountCopies(ctx)
+}
+
+// CountCopies counts the photos kept as separate files under different keys, for the Review page
+// to show without counting them itself.
+func (r *Runner) CountCopies(ctx context.Context) {
+	counted, err := syncer.LinkCopies(ctx, r.store, false)
+	if err != nil {
+		log.Printf("daemon: counting the photos kept as more than one file: %v", err)
+		return
+	}
+	r.mu.Lock()
+	r.copies, r.copiesCounted = counted, true
+	r.mu.Unlock()
+}
+
+// SeparateCopies is the last count, and whether there has been one since the daemon started.
+func (r *Runner) SeparateCopies() (syncer.Linking, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.copies, r.copiesCounted
+}
+
+// nowDoing renames the work in flight once a backup has moved on to something that is no longer
+// the backup, and lets go of the pass so its final counts are not shown as this work's progress.
+func (r *Runner) nowDoing(activity string) {
+	r.mu.Lock()
+	r.activity, r.current = activity, nil
+	r.mu.Unlock()
 }
 
 // reportIfOutOfDisk pushes the one failure that otherwise passes for success. A backup stopped
@@ -145,6 +217,12 @@ func (r *Runner) Stop() {
 
 func (r *Runner) start(activity, reason string, onFailureToStart func(error),
 	work func(context.Context, *syncer.Syncer) error) error {
+	return r.launch(activity, reason, func(ctx context.Context) error {
+		return r.run(ctx, onFailureToStart, work)
+	})
+}
+
+func (r *Runner) launch(activity, reason string, job func(context.Context) error) error {
 	ctx, err := r.claim(activity)
 	if err != nil {
 		return err
@@ -153,7 +231,7 @@ func (r *Runner) start(activity, reason string, onFailureToStart func(error),
 	log.Printf("daemon: %s starting (%s)", activity, reason)
 	go func() {
 		defer r.release()
-		if err := r.run(ctx, onFailureToStart, work); err != nil {
+		if err := job(ctx); err != nil {
 			log.Printf("daemon: %s failed: %v", activity, err)
 		}
 	}()

@@ -82,8 +82,9 @@ func (s *Server) nav(path string) []navItem {
 	return items
 }
 
-// waitingForReview is a count per page render, over the same set the review page lists. A
-// failure loses the pill rather than the page: the nav is not worth a 500.
+// waitingForReview is a count per page render, over the items the review page asks a decision
+// about; the copies it offers to remove or link are not counted, since nothing is waiting on
+// them. A failure loses the pill rather than the page: the nav is not worth a 500.
 func (s *Server) waitingForReview() int {
 	waiting, err := s.store.CountNeedingReview()
 	if err != nil {

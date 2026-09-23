@@ -187,8 +187,9 @@ anything has rotted it fires the notify hook as `verify_problems` and leaves
 found — delete it to have the next one start within the hour.
 
 The pool shares a photo held under two keys as one file with two names, so anything that
-copies it elsewhere should preserve hardlinks (`rsync -H`); `gpb duplicates --link` converts
-the copies an older release left as separate files.
+copies it elsewhere should preserve hardlinks (`rsync -H`). Every backup ends by linking the
+copies an older release left as separate files, so the first one after upgrading runs hours
+longer on a large pool; the Review page's button, or `gpb duplicates --link`, does it sooner.
 
 The daemon keeps its own weekly copy of the
 database at `~/gpb/data/state.backup.db`; whatever backs up the host should pick that file up

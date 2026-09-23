@@ -3,6 +3,7 @@ package daemon
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -85,5 +86,38 @@ func TestStopCancelsTheRunInFlight(t *testing.T) {
 	runner.Stop()
 	if ctx.Err() == nil {
 		t.Fatal("the run context survived Stop")
+	}
+}
+
+// Linking needs no browser, which is what lets the Review page's button and the end of a backup
+// both run it: a runner built with no Google session at all has to be able to finish the pass.
+func TestLinkingMakesRepeatedCopiesOneFileAndCountsThemAgain(t *testing.T) {
+	daemon := scheduledDaemon(t, "03:30")
+	first := backUpFile(t, daemon.store, "album-key", "the same photo")
+	second := backUpFile(t, daemon.store, "timeline-key", "the same photo")
+
+	if _, counted := daemon.runner.SeparateCopies(); counted {
+		t.Fatal("a runner that has never counted claims a count")
+	}
+	daemon.runner.CountCopies(t.Context())
+	if copies, _ := daemon.runner.SeparateCopies(); copies.Separate != 1 {
+		t.Fatalf("counted %+v before linking, want one extra file", copies)
+	}
+
+	if err := daemon.runner.StartLinking("test"); err != nil {
+		t.Fatalf("starting the pass: %v", err)
+	}
+	daemon.runner.inFlight.Wait()
+
+	firstInfo, _ := os.Stat(first)
+	secondInfo, _ := os.Stat(second)
+	if !os.SameFile(firstInfo, secondInfo) {
+		t.Error("the two copies are still two files")
+	}
+	if copies, _ := daemon.runner.SeparateCopies(); copies.Separate != 0 {
+		t.Errorf("counted %+v after linking, want nothing left", copies)
+	}
+	if activity := daemon.runner.Activity(); activity != "" {
+		t.Errorf("the runner still reports %q after the pass", activity)
 	}
 }
