@@ -2,7 +2,7 @@ package syncer
 
 import (
 	"context"
-	"errors"
+	"crypto/rand"
 	"fmt"
 	"log"
 	"os"
@@ -13,18 +13,19 @@ import (
 )
 
 // linkOver makes path a second name for the file at held, replacing whatever path was. The link
-// is made under a temporary name beside path and renamed over it, so path is at every moment
-// either the file it was or the held one — never missing, never half written. Both names are
-// real files to everything else in gpb: removing either leaves the other, which is what lets the
-// written-off-copy cleanup and a verify repair go on working on one name at a time.
-func linkOver(held, path string) error {
+// is made under a temporary name in the staging directory and renamed over path, so path is at
+// every moment either the file it was or the held one — never missing, never half written — and a
+// crash between the two leaves its litter where the next run tidies, not in the pool. Both names
+// are real files to everything else in gpb: removing either leaves the other, which is what lets
+// the written-off-copy cleanup and a verify repair go on working on one name at a time.
+func linkOver(held, path, stagingDir string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("preparing the pool directory: %w", err)
 	}
-	staged := path + ".link"
-	if err := os.Remove(staged); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("clearing a stale link: %w", err)
+	if err := os.MkdirAll(stagingDir, 0o755); err != nil {
+		return fmt.Errorf("preparing the staging directory: %w", err)
 	}
+	staged := filepath.Join(stagingDir, rand.Text()+stagedLinkExtension)
 	if err := os.Link(held, staged); err != nil {
 		return fmt.Errorf("linking to the held copy: %w", err)
 	}
@@ -48,7 +49,7 @@ func (s *Syncer) commitSharingAHeldCopy(item store.MediaItem, result downloaded,
 		log.Printf("syncer: not sharing a held copy of an item: %s", refusal)
 		return false
 	}
-	if err := linkOver(held.LocalPath, final); err != nil {
+	if err := linkOver(held.LocalPath, final, s.tempDir); err != nil {
 		log.Printf("syncer: keeping a second copy of an item rather than a link: %v", err)
 		return false
 	}
@@ -86,12 +87,23 @@ func (l Linking) String() string {
 	return strings.Join(parts, ", ")
 }
 
-// LinkCopies finds the photographs held as more than one file under different keys and, with
-// link set, makes every copy a hardlink to the first. Both files are re-read first and must hash
-// to what was recorded: linking over a good file with a rotted one would turn one bad copy into
-// two. Files already sharing an inode are left alone, so a pass interrupted part way is finished
-// by the next.
-func LinkCopies(ctx context.Context, db *store.Store, link bool) (Linking, error) {
+const stagedLinkExtension = ".link"
+
+// CountCopies finds the photographs held as more than one file under different keys, and reads
+// none of them.
+func CountCopies(ctx context.Context, db *store.Store) (Linking, error) {
+	return copies(ctx, db, "", false)
+}
+
+// LinkCopies makes every copy CountCopies would find a hardlink to the first. Both files are
+// re-read first and must hash to what was recorded: linking over a good file with a rotted one
+// would turn one bad copy into two. Files already sharing an inode are left alone, so a pass
+// interrupted part way is finished by the next.
+func LinkCopies(ctx context.Context, db *store.Store, stagingDir string) (Linking, error) {
+	return copies(ctx, db, stagingDir, true)
+}
+
+func copies(ctx context.Context, db *store.Store, stagingDir string, link bool) (Linking, error) {
 	groups, err := db.SameBytesGroups()
 	if err != nil {
 		return Linking{}, err
@@ -112,7 +124,7 @@ func LinkCopies(ctx context.Context, db *store.Store, link bool) (Linking, error
 		if !link {
 			continue
 		}
-		linked, freed, refusals := linkGroup(group[0], separate)
+		linked, freed, refusals := linkGroup(group[0], separate, stagingDir)
 		linking.Linked += linked
 		linking.Freed += freed
 		linking.Refusals = append(linking.Refusals, refusals...)
@@ -135,7 +147,7 @@ func separateFiles(kept store.MediaItem, copies []store.MediaItem) []store.Media
 	return separate
 }
 
-func linkGroup(kept store.MediaItem, copies []store.MediaItem) (int, int64, []string) {
+func linkGroup(kept store.MediaItem, copies []store.MediaItem, stagingDir string) (int, int64, []string) {
 	if refusal := keptCopyIsIntact(kept); refusal != "" {
 		return 0, 0, []string{kept.LocalPath + ": " + refusal}
 	}
@@ -146,7 +158,7 @@ func linkGroup(kept store.MediaItem, copies []store.MediaItem) (int, int64, []st
 			refusals = append(refusals, repeat.LocalPath+": "+refusal)
 			continue
 		}
-		if err := linkOver(kept.LocalPath, repeat.LocalPath); err != nil {
+		if err := linkOver(kept.LocalPath, repeat.LocalPath, stagingDir); err != nil {
 			refusals = append(refusals, repeat.LocalPath+": "+err.Error())
 			continue
 		}

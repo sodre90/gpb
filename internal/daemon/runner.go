@@ -91,7 +91,7 @@ func (r *Runner) StartLinking(reason string) error {
 // A failure is logged and not returned, for relinkAlbums' reason.
 func (r *Runner) linkRepeatedCopies(ctx context.Context) {
 	r.nowDoing(copyLinking)
-	linking, err := syncer.LinkCopies(ctx, r.store, true)
+	linking, err := syncer.LinkCopies(ctx, r.store, engine.Options(r.cfg).TempDir)
 	for _, refusal := range linking.Refusals {
 		log.Printf("daemon: left as a separate copy: %s", refusal)
 	}
@@ -106,7 +106,7 @@ func (r *Runner) linkRepeatedCopies(ctx context.Context) {
 // CountCopies counts the photos kept as separate files under different keys, for the Review page
 // to show without counting them itself.
 func (r *Runner) CountCopies(ctx context.Context) {
-	counted, err := syncer.LinkCopies(ctx, r.store, false)
+	counted, err := syncer.CountCopies(ctx, r.store)
 	if err != nil {
 		log.Printf("daemon: counting the photos kept as more than one file: %v", err)
 		return

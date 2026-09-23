@@ -1,7 +1,9 @@
 package syncer
 
 import (
+	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -91,7 +93,7 @@ func TestLinkCopiesCountsThenLinksWhatIsAlreadyOnDisk(t *testing.T) {
 	second := f.backUp(t, "timeline-key", "the same photo")
 	f.backUp(t, "another-photo", "a different photo")
 
-	counted, err := LinkCopies(t.Context(), f.store, false)
+	counted, err := CountCopies(t.Context(), f.store)
 	if err != nil {
 		t.Fatalf("counting: %v", err)
 	}
@@ -102,7 +104,7 @@ func TestLinkCopiesCountsThenLinksWhatIsAlreadyOnDisk(t *testing.T) {
 		t.Fatal("counting linked the files")
 	}
 
-	linked, err := LinkCopies(t.Context(), f.store, true)
+	linked, err := LinkCopies(t.Context(), f.store, f.staging())
 	if err != nil {
 		t.Fatalf("linking: %v", err)
 	}
@@ -113,7 +115,7 @@ func TestLinkCopiesCountsThenLinksWhatIsAlreadyOnDisk(t *testing.T) {
 		t.Fatal("the two copies are still two files")
 	}
 
-	again, err := LinkCopies(t.Context(), f.store, true)
+	again, err := LinkCopies(t.Context(), f.store, f.staging())
 	if err != nil {
 		t.Fatalf("linking again: %v", err)
 	}
@@ -130,7 +132,7 @@ func TestLinkCopiesLeavesACopyThatNoLongerMatchesItsRecord(t *testing.T) {
 		t.Fatalf("rotting a copy: %v", err)
 	}
 
-	linking, err := LinkCopies(t.Context(), f.store, true)
+	linking, err := LinkCopies(t.Context(), f.store, f.staging())
 	if err != nil {
 		t.Fatalf("linking: %v", err)
 	}
@@ -147,7 +149,7 @@ func TestVerifyReadsAFileWithTwoNamesOnce(t *testing.T) {
 	f := newVerifyFixture(t)
 	first := f.backUp(t, "album-key", "the same photo")
 	second := f.backUp(t, "timeline-key", "the same photo")
-	if err := linkOver(first, second); err != nil {
+	if err := linkOver(first, second, f.staging()); err != nil {
 		t.Fatalf("linking: %v", err)
 	}
 
@@ -187,7 +189,7 @@ func TestRemovingALinkedWrittenOffCopyLeavesTheKeptPhoto(t *testing.T) {
 	f := newVerifyFixture(t)
 	kept := f.backUp(t, "kept", "the same photo")
 	twin := f.backUp(t, "twin", "the same photo")
-	if err := linkOver(kept, twin); err != nil {
+	if err := linkOver(kept, twin, f.staging()); err != nil {
 		t.Fatalf("linking: %v", err)
 	}
 	if err := f.store.MarkMissingUpstream("twin", time.Now()); err != nil {
@@ -203,5 +205,47 @@ func TestRemovingALinkedWrittenOffCopyLeavesTheKeptPhoto(t *testing.T) {
 	}
 	if body, err := os.ReadFile(kept); err != nil || string(body) != "the same photo" {
 		t.Errorf("the kept photo reads %q, %v after its linked twin was removed", body, err)
+	}
+}
+
+func (f *verifyFixture) staging() string { return filepath.Join(f.pool, ".tmp") }
+
+// A crash between making a link and renaming it into place leaves the link behind. It has to be
+// somewhere the next run clears, not a name in the pool nothing would ever look at.
+func TestALinkACrashLeftBehindIsClearedByTheNextRunsTidy(t *testing.T) {
+	f := newVerifyFixture(t)
+	first := f.backUp(t, "album-key", "the same photo")
+	second := f.backUp(t, "timeline-key", "the same photo")
+	if err := linkOver(first, second, f.staging()); err != nil {
+		t.Fatalf("linking: %v", err)
+	}
+	pool, _ := os.ReadDir(f.pool)
+	for _, entry := range pool {
+		if filepath.Ext(entry.Name()) == stagedLinkExtension {
+			t.Errorf("linking left %s in the pool", entry.Name())
+		}
+	}
+
+	left := filepath.Join(f.staging(), "interrupted"+stagedLinkExtension)
+	if err := os.Link(first, left); err != nil {
+		t.Fatalf("leaving a link behind: %v", err)
+	}
+	resumable := filepath.Join(f.staging(), "queued-key.part")
+	if err := os.WriteFile(resumable, []byte("the same"), 0o644); err != nil {
+		t.Fatalf("leaving a partial behind: %v", err)
+	}
+
+	discarded, err := discardStaleParts(f.staging(), map[string]bool{"queued-key": true})
+	if err != nil {
+		t.Fatalf("tidying: %v", err)
+	}
+	if _, err := os.Stat(left); !errors.Is(err, os.ErrNotExist) || discarded != 1 {
+		t.Errorf("the tidy discarded %d and left the link (%v)", discarded, err)
+	}
+	if _, err := os.Stat(resumable); err != nil {
+		t.Errorf("the tidy took a partial an item is still queued to resume: %v", err)
+	}
+	if body, err := os.ReadFile(first); err != nil || string(body) != "the same photo" {
+		t.Errorf("the photo the link named reads %q, %v", body, err)
 	}
 }

@@ -93,6 +93,7 @@ func TestStopCancelsTheRunInFlight(t *testing.T) {
 // both run it: a runner built with no Google session at all has to be able to finish the pass.
 func TestLinkingMakesRepeatedCopiesOneFileAndCountsThemAgain(t *testing.T) {
 	daemon := scheduledDaemon(t, "03:30")
+	daemon.runner.cfg.PhotosDir = t.TempDir()
 	first := backUpFile(t, daemon.store, "album-key", "the same photo")
 	second := backUpFile(t, daemon.store, "timeline-key", "the same photo")
 

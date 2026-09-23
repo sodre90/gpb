@@ -225,7 +225,7 @@ func (s *Syncer) tidyStagingDirectory() {
 		return
 	}
 	if discarded > 0 {
-		log.Printf("syncer: discarded %d stale partial downloads", discarded)
+		log.Printf("syncer: discarded %d leftovers of interrupted downloads and links", discarded)
 	}
 }
 

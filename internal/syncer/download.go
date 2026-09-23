@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gpb/internal/gphotos"
 	"gpb/internal/store"
@@ -149,9 +150,9 @@ func syncDir(path string) error {
 	return nil
 }
 
-// discardStaleParts clears partial downloads left by a previous process for items that are
-// no longer pending. A .part for an item still queued is kept deliberately: that is the
-// resume path.
+// discardStaleParts clears what a previous process left in the staging directory: partial
+// downloads for items that are no longer pending, and links it had made and not yet renamed into
+// the pool. A .part for an item still queued is kept deliberately: that is the resume path.
 func discardStaleParts(tempDir string, keep map[string]bool) (int, error) {
 	entries, err := os.ReadDir(tempDir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -164,13 +165,26 @@ func discardStaleParts(tempDir string, keep map[string]bool) (int, error) {
 	discarded := 0
 	for _, entry := range entries {
 		name := entry.Name()
-		if filepath.Ext(name) != ".part" || keep[name[:len(name)-len(".part")]] {
+		if !isStale(name, keep) {
 			continue
 		}
 		if err := os.Remove(filepath.Join(tempDir, name)); err != nil {
-			return discarded, fmt.Errorf("discarding a stale partial: %w", err)
+			return discarded, fmt.Errorf("discarding a stale leftover: %w", err)
 		}
 		discarded++
 	}
 	return discarded, nil
+}
+
+// isStale holds for every staged link because only a pass holding the run lock stages one, and
+// the staging directory is tidied under that lock before anything is staged.
+func isStale(name string, keep map[string]bool) bool {
+	switch filepath.Ext(name) {
+	case ".part":
+		return !keep[strings.TrimSuffix(name, ".part")]
+	case stagedLinkExtension:
+		return true
+	default:
+		return false
+	}
 }

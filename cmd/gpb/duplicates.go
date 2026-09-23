@@ -50,7 +50,7 @@ func runDuplicates(ctx context.Context, args []string) error {
 		}
 		fmt.Fprintln(stdout, cleanup)
 
-		linking, err := syncer.LinkCopies(ctx, db, *link)
+		linking, err := copiesOf(ctx, db, cfg, *link)
 		if err != nil {
 			return err
 		}
@@ -64,4 +64,11 @@ func runDuplicates(ctx context.Context, args []string) error {
 		}
 		return nil
 	})
+}
+
+func copiesOf(ctx context.Context, db *store.Store, cfg config.Config, link bool) (syncer.Linking, error) {
+	if link {
+		return syncer.LinkCopies(ctx, db, engine.Options(cfg).TempDir)
+	}
+	return syncer.CountCopies(ctx, db)
 }
