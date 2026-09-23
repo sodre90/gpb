@@ -616,6 +616,21 @@ func TestDecodeFramesReadsChunkedResponses(t *testing.T) {
 	}
 }
 
+func TestDecodeFramesStepsOverBookkeepingFrames(t *testing.T) {
+	body := ")]}'\n\n120\n[[\"wrb.fr\",\"F2A0H\",\"[[],null]\",null,null,null,\"generic\"],[\"di\",51],[\"af.httprm\",51,\"-1234\",7]]\n"
+
+	frames, err := decodeFrames(body)
+	if err != nil {
+		t.Fatalf("decoding a response with bookkeeping frames: %v", err)
+	}
+	if len(frames) != 3 {
+		t.Fatalf("decoded %d frames, want all 3 kept", len(frames))
+	}
+	if _, err := payloadFor(frames, "F2A0H"); err != nil {
+		t.Fatalf("the answer was lost among the bookkeeping frames: %v", err)
+	}
+}
+
 func TestDecodeFramesRejectsAnUnguardedBody(t *testing.T) {
 	if _, err := decodeFrames("wat"); !errors.Is(err, ErrProtocolDrift) {
 		t.Fatalf("an unguarded body decoded as %v, want drift", err)

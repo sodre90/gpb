@@ -107,15 +107,25 @@ func framesFromRows(rows [][]json.RawMessage) []frame {
 		if err := json.Unmarshal(row[0], &next.tag); err != nil {
 			continue
 		}
-		if len(row) > 1 {
-			json.Unmarshal(row[1], &next.rpcID)
-		}
-		if len(row) > 2 {
-			json.Unmarshal(row[2], &next.payload)
-		}
+		next.rpcID = optionalString(row, 1)
+		next.payload = optionalString(row, 2)
 		decoded = append(decoded, next)
 	}
 	return decoded
+}
+
+// optionalString leaves a field empty rather than failing when it is not a string. Google
+// appends bookkeeping frames ("di", "af.httprm") that carry numbers where an answer carries
+// strings, and a missing answer is still caught by payloadFor, which names what did arrive.
+func optionalString(row []json.RawMessage, index int) string {
+	if index >= len(row) {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(row[index], &text); err != nil {
+		return ""
+	}
+	return text
 }
 
 // payloadFor picks the frame answering one rpcid and decodes its doubly-encoded payload.
