@@ -320,7 +320,10 @@ albums they are a member of.
 The two listings use **disjoint id namespaces** (70-character ids in `F2A0H`, 44-character
 in `Z5xsfc`) and issue **different media keys per share identity** for identical content. One
 album in this library exists as both a bundle and a named shared album; following both would
-download its contents twice. Content-level de-duplication is not built — one overlap in 181.
+download its contents twice. That undercounted badly: the album listing and the library timeline
+disagree the same way, so a library followed alongside its albums held 20,795 photos twice or
+more — 626 GB of a 1.4 TB pool, measured 2026-09-22. The pool now shares such files as hardlinks
+(§8).
 
 **People.** Slot 10 of an `F2A0H` entry is the list of people an album or bundle belongs to,
 first the one it came from (id at `[1]`, display name at `[11][0]`); it decoded on all 181
@@ -700,6 +703,18 @@ Host side these are bind mounts from local disk on the Fedora box — proposed
   - Rebuilt after every run and whenever a sync mode changes, so an unfollowed album's
     folder disappears when the user says so rather than at the next sync. A rebuild failure
     is logged, never fatal — the backup succeeded.
+- **Hardlinks do belong in the pool itself**, for the opposite reason. When a download hashes to
+  the bytes of a file already held under another key, its pool name becomes a second name for
+  that file — after the held one is re-read and found intact, since linking to a rotted copy would
+  throw away the good bytes just fetched. Here both names are real backups of the same photograph,
+  so removing either (a write-off cleaned up by `gpb duplicates --delete`, say) must leave the
+  other, which is exactly what a hardlink does. Each key keeps its own row and its own name. A
+  link is made under a temporary name and renamed over the target, so a name is never missing;
+  `gpb duplicates --link` does the same for copies made before this existed, and `verify` hashes
+  each file once however many names it has. Two workers that fetch the same bytes in the same
+  moment both miss each other and commit two files; the next `--link` makes them one. Anything
+  that copies the pool elsewhere needs to preserve hardlinks (`rsync -H`) or it will store the
+  shared photos twice again.
 - **Write protocol:** download to `/photos/.tmp/<media_key>.part`, hash while streaming,
   verify length against the listing metadata (and Content-Length), `fsync`, then `rename(2)`
   into the pool and update the DB row. The rename is the commit; a crash leaves only a

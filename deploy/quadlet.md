@@ -170,7 +170,7 @@ journalctl --user -u gpb -f                        # what it is doing
 podman exec systemd-gpb gpb version                # which release is running
 podman exec systemd-gpb gpb status                 # what the Google session is doing
 podman exec systemd-gpb gpb verify                 # re-read the backed-up files, check every hash
-podman exec systemd-gpb gpb duplicates             # written-off files that are copies of photos still backed up
+podman exec systemd-gpb gpb duplicates             # photos kept as more than one file (--delete, --link)
 podman auto-update && systemctl --user restart gpb # update (the unit carries AutoUpdate=registry)
 ```
 
@@ -185,6 +185,10 @@ reads every file, so it takes as long as reading the pool takes; it repairs noth
 anything has rotted it fires the notify hook as `verify_problems` and leaves
 `gpb verify --repair` to you. `~/gpb/data/verify.last` says when the last one finished and what it
 found — delete it to have the next one start within the hour.
+
+The pool shares a photo held under two keys as one file with two names, so anything that
+copies it elsewhere should preserve hardlinks (`rsync -H`); `gpb duplicates --link` converts
+the copies an older release left as separate files.
 
 The daemon keeps its own weekly copy of the
 database at `~/gpb/data/state.backup.db`; whatever backs up the host should pick that file up

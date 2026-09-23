@@ -154,7 +154,8 @@ gpb unfollow <id>          stop backing up an album
 gpb sync [--limit N]       run one backup pass now
 gpb links                  rebuild <photos>/albums/, the symlink view of the pool
 gpb verify [--repair]      re-read the backed-up files and check them against their hashes
-gpb duplicates [--delete]  list the written-off files that are copies of photos still backed up
+gpb duplicates [--delete] [--link]
+                           list photos kept as more than one file
 gpb probe <key|file>...    ask Google for items as a run would and say what came back
 ```
 
@@ -180,6 +181,14 @@ least as large — the written-off copy is nothing but disk. `gpb duplicates` li
 touches nothing; `--delete` removes each written-off file and its row, after re-reading the copy
 that stays and checking it still hashes to what was recorded. A kept copy that cannot be read, or
 reads as something else, keeps its twin: the twin may be the only good copy left.
+
+The other way a photo ends up on the disk twice is not a mistake of Google's listing but a habit
+of its naming: the same photograph has one key in an album and another on the library timeline,
+so following both used to fetch it twice — 626 GB of the pool this was built against. A download
+that hashes to bytes already held now becomes a second name for that file, a hardlink, and
+`gpb duplicates` counts the copies made before that; `--link` re-reads both and makes each pair
+one file. Whatever copies the pool elsewhere should keep hardlinks (`rsync -H`), or the copy
+stores those photos twice.
 
 Browser login works on macOS too, with one difference: instead of the embedded noVNC canvas,
 Chrome opens on your own screen and the web UI tells you to sign in there and come back. The VNC

@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"syscall"
 
 	"gpb/internal/store"
 )
@@ -103,6 +104,7 @@ func Verify(ctx context.Context, db *store.Store, repair bool) (Verification, er
 	log.Printf("verify: re-reading %d backed-up files", len(items))
 
 	var report Verification
+	digests := digestsByFile{}
 	for _, item := range items {
 		if err := ctx.Err(); err != nil {
 			return report, err
@@ -110,7 +112,7 @@ func Verify(ctx context.Context, db *store.Store, repair bool) (Verification, er
 
 		report.Checked++
 
-		digest, err := hashFile(item.LocalPath)
+		digest, err := digests.hash(item.LocalPath)
 		switch {
 		case errors.Is(err, os.ErrNotExist):
 			report.note(item, FaultMissing, "nothing at that path")
@@ -176,4 +178,39 @@ func shortHash(digest string) string {
 		return digest
 	}
 	return digest[:12] + "…"
+}
+
+// digestsByFile hashes each file on the disk once however many names it has. A photograph held
+// under two keys is one file with two names (see LinkCopies), and reading it twice would double
+// a sweep that is already hours long for nothing a second read could find.
+type digestsByFile map[fileIdentity]string
+
+type fileIdentity struct {
+	device, inode uint64
+}
+
+func (d digestsByFile) hash(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	identity, known := identityOf(info)
+	if known {
+		if digest, seen := d[identity]; seen {
+			return digest, nil
+		}
+	}
+	digest, err := hashFile(path)
+	if err == nil && known {
+		d[identity] = digest
+	}
+	return digest, err
+}
+
+func identityOf(info os.FileInfo) (fileIdentity, bool) {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return fileIdentity{}, false
+	}
+	return fileIdentity{device: uint64(stat.Dev), inode: stat.Ino}, true
 }

@@ -48,8 +48,10 @@ func (s *Syncer) fetch(ctx context.Context, item store.MediaItem, albumID string
 	}
 
 	final := poolPath(s.poolDir, withFilename(item, result.Filename))
-	if err := commit(part, final); err != nil {
-		return downloaded{}, err
+	if !s.commitSharingAHeldCopy(item, result, part, final) {
+		if err := commit(part, final); err != nil {
+			return downloaded{}, err
+		}
 	}
 
 	result.Path = final

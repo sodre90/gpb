@@ -29,7 +29,9 @@ usage:
   gpb sync [--limit N]       run one backup pass now
   gpb links                  rebuild <photos>/albums/, the symlink view of the pool
   gpb verify [--repair]      re-read the backed-up files and check them against their hashes
-  gpb duplicates [--delete]  list the written-off files that are copies of photos still backed up; --delete removes them
+  gpb duplicates [--delete] [--link]
+                             list photos kept as more than one file; --delete removes written-off
+                             copies, --link makes the rest one hardlinked file each
   gpb probe [--again-after D] <key|file>...
                              ask Google for items as a run would and say what came back; changes nothing
 `

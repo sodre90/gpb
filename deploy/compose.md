@@ -117,7 +117,7 @@ docker compose logs -f gpb                      # what it is doing
 docker compose exec gpb gpb version             # which release is running
 docker compose exec gpb gpb status              # what the Google session is doing
 docker compose exec gpb gpb verify              # re-read the backed-up files, check every hash
-docker compose exec gpb gpb duplicates          # written-off files that are copies of photos still backed up
+docker compose exec gpb gpb duplicates          # photos kept as more than one file (--delete, --link)
 docker compose pull && docker compose up -d     # update
 ```
 
@@ -133,7 +133,9 @@ anything has rotted it fires the notify hook as `verify_problems` and leaves
 `gpb verify --repair` to you. `<data>/verify.last` says when the last one finished and what it
 found — delete it to have the next one start within the hour.
 
-The daemon keeps its own weekly copy of the database at
+The pool shares a photo held under two keys as one file with two names, so anything that copies it
+elsewhere should preserve hardlinks (`rsync -H`); `gpb duplicates --link` converts the copies an
+older release left as separate files. The daemon keeps its own weekly copy of the database at
 `<data>/state.backup.db` — that one needs nothing from you beyond letting whatever backs up the
 host pick the file up.
 
