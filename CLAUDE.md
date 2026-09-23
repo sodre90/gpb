@@ -54,6 +54,7 @@ internal/homeassistant/  the MQTT bridge and its discovery messages
 internal/daemon/         scheduler, keepalive, notify hook, wiring
 deploy/                  the two installation guides, the Quadlet unit, the image's entrypoint
 design/                  the web design brief, and static previews of every page
+scripts/release.sh       cutting a release: checks, version bump, tag, GitHub Release, amd64 image
 spike/                   Phase 0 throwaway protocol spike (separate Go module)
 ```
 
