@@ -185,6 +185,22 @@ func (s *Store) Item(mediaKey string) (MediaItem, error) {
 	}
 }
 
+// ItemStoredAs finds an item by the name of its file in the pool, which begins with a shortened
+// media key — the one handle on an item a person browsing the disk actually has.
+func (s *Store) ItemStoredAs(fileName string) (MediaItem, error) {
+	suffix := "/" + fileName
+	items, err := s.queryItems(`SELECT `+itemColumns+` FROM media_items
+		WHERE substr(local_path, -?) = ?`, len(suffix), suffix)
+	switch {
+	case err != nil:
+		return MediaItem{}, err
+	case len(items) == 0:
+		return MediaItem{}, fmt.Errorf("no backed-up file is called %s", fileName)
+	default:
+		return items[0], nil
+	}
+}
+
 func (s *Store) SetItemState(mediaKey string, state State) error {
 	result, err := s.db.Exec(`UPDATE media_items SET state = ? WHERE media_key = ?`,
 		string(state), mediaKey)

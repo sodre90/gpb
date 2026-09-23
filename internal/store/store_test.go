@@ -991,3 +991,33 @@ func TestDownloadedFilesReachesOutsideTheSyncSet(t *testing.T) {
 		t.Fatalf("the downloaded files are %v, want both", keysOf(onDisk))
 	}
 }
+
+// The pool name is the handle someone browsing the disk has, and it has to find its item by
+// the whole name only: an underscore in it is not a wildcard, and a name that merely ends the
+// same way is a different file.
+func TestAnItemIsFoundByTheNameOfItsFile(t *testing.T) {
+	s := openTestStore(t)
+	at := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	for key, path := range map[string]string{
+		"AF1QipKEY1": "/photos/pool/2026/2026-08/AF1QipKEY_PXL_1.MP.jpg",
+		"AF1QipKEY2": "/photos/pool/2026/2026-08/xAF1QipKEY_PXL_1.MP.jpg",
+	} {
+		if err := s.UpsertItem(MediaItem{MediaKey: key, Filename: "PXL_1.MP.jpg", CapturedAt: at}, at); err != nil {
+			t.Fatalf("seeding: %v", err)
+		}
+		if err := s.MarkDownloaded(MediaItem{MediaKey: key, Filename: "PXL_1.MP.jpg", LocalPath: path, SizeBytes: 1, SHA256: "ab"}, at); err != nil {
+			t.Fatalf("marking downloaded: %v", err)
+		}
+	}
+
+	item, err := s.ItemStoredAs("AF1QipKEY_PXL_1.MP.jpg")
+	if err != nil {
+		t.Fatalf("finding by file name: %v", err)
+	}
+	if item.MediaKey != "AF1QipKEY1" {
+		t.Errorf("found %s, want the item whose file has exactly that name", item.MediaKey)
+	}
+	if _, err := s.ItemStoredAs("AF1QipKEY%PXL_1.MP.jpg"); err == nil {
+		t.Error("a % in the name matched as a wildcard")
+	}
+}

@@ -155,6 +155,7 @@ gpb sync [--limit N]       run one backup pass now
 gpb links                  rebuild <photos>/albums/, the symlink view of the pool
 gpb verify [--repair]      re-read the backed-up files and check them against their hashes
 gpb duplicates [--delete]  list the written-off files that are copies of photos still backed up
+gpb probe <key|file>...    ask Google for items as a run would and say what came back
 ```
 
 `verify` is the one nothing else does: a run notices a file that has *gone*, but a file quietly
@@ -163,6 +164,12 @@ it says so. The daemon runs it once a month on its own and fires the notify hook
 `verify_problems` when it finds damage; run by hand, it exits non-zero when it found anything, so
 a script needs no output parsing to notice. `--repair` puts the damaged files back on the work
 list for the next run to fetch again, and deletes nothing.
+
+`probe` is for questions a backup cannot answer about itself — whether a motion photo arrives with
+its video, what an edited photo downloads as. It asks Google for the items you name, by media key
+or by their file name in the pool, exactly as a run would, and says what came back: the host, the
+type and size, what the bytes actually are, and whether they match the file on disk. It writes
+nothing to the pool or the database, and never prints the signed address it fetched from.
 
 `duplicates` is the one thing that does delete (the Review page offers the same list, with one
 button that does what `--delete` does), and only one kind of file. Google's listing

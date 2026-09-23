@@ -30,6 +30,8 @@ usage:
   gpb links                  rebuild <photos>/albums/, the symlink view of the pool
   gpb verify [--repair]      re-read the backed-up files and check them against their hashes
   gpb duplicates [--delete]  list the written-off files that are copies of photos still backed up; --delete removes them
+  gpb probe [--again-after D] <key|file>...
+                             ask Google for items as a run would and say what came back; changes nothing
 `
 
 func main() {
@@ -71,6 +73,8 @@ func run(ctx context.Context, command string, args []string) error {
 		return runVerify(ctx, args)
 	case "duplicates":
 		return runDuplicates(ctx, args)
+	case "probe":
+		return runProbe(ctx, args)
 	case "version", "--version":
 		fmt.Printf("gpb %s\n", version.Current)
 		return nil

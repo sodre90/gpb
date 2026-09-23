@@ -38,7 +38,7 @@ Go 1.26.6 or later. `GPB_DATA_DIR`, `GPB_PHOTOS_DIR`, `GPB_CHROME_PATH`, `GPB_NO
 ## Layout
 
 ```
-cmd/gpb/                 daemon | status | passwd | albums | follow | unfollow | sync | links | verify | duplicates
+cmd/gpb/                 daemon | status | passwd | albums | follow | unfollow | sync | links | verify | duplicates | probe
 internal/auth/           chromedp warmup, session export, headful re-auth stack
 internal/config/         config.toml: defaults, validation, the password hash
 internal/gphotos/        the batchexecute protocol: listings, downloads, thumbnails
