@@ -205,7 +205,9 @@ type BackupSet struct {
 	Done     int
 	Pending  int
 	Failed   int
-	Bytes    int64
+	// Bytes is what the backup takes on disk; VideoBytes is the part of it that is video.
+	Bytes      int64
+	VideoBytes int64
 }
 
 func (b BackupSet) Empty() bool { return b.Albums == 0 && !b.Library }
@@ -239,16 +241,17 @@ func (s *Store) BackupSet() (BackupSet, error) {
 	// 2026-09-23 — against 305 ms for subtracting the repeats in a second query.
 	err = s.db.QueryRow(`
 		SELECT COALESCE(SUM(known), 0), COALESCE(SUM(done), 0), COALESCE(SUM(pending), 0),
-			COALESCE(SUM(failed), 0), COALESCE(SUM(done_bytes), 0)
+			COALESCE(SUM(failed), 0), COALESCE(SUM(done_bytes), 0), COALESCE(SUM(done_video_bytes), 0)
 		FROM (
 			SELECT COUNT(*) AS known,
 				SUM(CASE WHEN state = 'done' THEN 1 ELSE 0 END) AS done,
 				SUM(CASE WHEN state IN ('discovered', 'queued', 'downloading') THEN 1 ELSE 0 END) AS pending,
 				SUM(CASE WHEN state = 'failed' THEN 1 ELSE 0 END) AS failed,
-				MAX(CASE WHEN state = 'done' THEN size_bytes END) AS done_bytes
+				MAX(CASE WHEN state = 'done' THEN size_bytes END) AS done_bytes,
+				MAX(CASE WHEN state = 'done' AND is_video = 1 THEN size_bytes END) AS done_video_bytes
 			FROM media_items WHERE `+inTheSyncSet+`
 			GROUP BY COALESCE(sha256, media_key))`).
-		Scan(&set.Known, &set.Done, &set.Pending, &set.Failed, &set.Bytes)
+		Scan(&set.Known, &set.Done, &set.Pending, &set.Failed, &set.Bytes, &set.VideoBytes)
 	if err != nil {
 		return BackupSet{}, fmt.Errorf("summarising the backup set: %w", err)
 	}

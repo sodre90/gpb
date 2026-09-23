@@ -651,6 +651,28 @@ func TestTheBackupSetMeasuresAPhotoHeldUnderTwoKeysOnce(t *testing.T) {
 	}
 }
 
+func TestTheBackupSetSaysHowMuchOfItIsVideo(t *testing.T) {
+	store := openTestStore(t)
+	seedFollowedAlbum(t, store, SyncAll, "photo-key", "video-key")
+	if err := store.UpsertItem(MediaItem{MediaKey: "video-key", Filename: "clip.mp4", IsVideo: true}, noon); err != nil {
+		t.Fatalf("marking the video: %v", err)
+	}
+	for key, size := range map[string]int64{"photo-key": 1000, "video-key": 5000} {
+		item := MediaItem{MediaKey: key, Filename: key, LocalPath: "/pool/" + key, SizeBytes: size, SHA256: key}
+		if err := store.MarkDownloaded(item, noon); err != nil {
+			t.Fatalf("marking %s downloaded: %v", key, err)
+		}
+	}
+
+	set, err := store.BackupSet()
+	if err != nil {
+		t.Fatalf("summarising the backup set: %v", err)
+	}
+	if set.Bytes != 6000 || set.VideoBytes != 5000 {
+		t.Errorf("the set measures %d bytes, %d of them video; want 6000 and 5000", set.Bytes, set.VideoBytes)
+	}
+}
+
 // An album nobody asked for must not appear in the totals, and neither must its items: the whole
 // promise of the summary is that it describes what a run would actually fetch.
 func TestTheBackupSetIgnoresAlbumsNobodyFollows(t *testing.T) {

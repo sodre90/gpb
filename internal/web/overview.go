@@ -36,6 +36,8 @@ type backupCard struct {
 	Failed   int
 	Percent  string
 	OnDisk   string
+	Photos   string
+	Videos   string
 	// Free is what the pool's filesystem has left, and Cramped whether that is less than the
 	// floor a run stops at. A library is far larger than the disk it is usually pointed at, and
 	// the difference is only interesting before a run hits it: afterwards the run has already
@@ -58,6 +60,8 @@ func backupCardFor(set store.BackupSet) backupCard {
 		Failed:   set.Failed,
 		Percent:  percentOf(set.Done, set.Known),
 		OnDisk:   humanBytes(set.Bytes),
+		Photos:   humanBytes(set.Bytes - set.VideoBytes),
+		Videos:   humanBytes(set.VideoBytes),
 	}
 }
 

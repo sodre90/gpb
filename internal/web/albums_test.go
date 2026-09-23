@@ -93,7 +93,7 @@ func TestTheSummarySaysHowMuchRoomIsLeft(t *testing.T) {
 	seedItems(t, server, "holiday", 2)
 
 	body := get(handler, "/", cookie).Body.String()
-	if !strings.Contains(body, "on disk · ") {
+	if !strings.Contains(body, " free</p>") {
 		t.Errorf("the summary does not say how much room is left; body was:\n%s", body)
 	}
 }
@@ -465,5 +465,35 @@ func TestTheLibraryIsNotListedAmongTheAlbums(t *testing.T) {
 	body := get(handler, "/albums", login(t, handler)).Body.String()
 	if !strings.Contains(body, "1 album, 0 under backup") {
 		t.Errorf("the library was counted as an album; body was:\n%s", body)
+	}
+}
+
+func TestTheSummarySaysWhatTheBackupTakesAndHowMuchIsVideo(t *testing.T) {
+	server, _ := testServer(t)
+	handler := server.Handler()
+	cookie := login(t, handler)
+
+	seedAlbums(t, server, store.Album{ID: "holiday", Title: "Holiday 2026", ItemCount: 2})
+	if err := server.store.SetAlbumSyncMode("holiday", store.SyncAll); err != nil {
+		t.Fatalf("following an album: %v", err)
+	}
+	keys := seedItems(t, server, "holiday", 2)
+	now := time.Now()
+	if err := server.store.UpsertItem(store.MediaItem{MediaKey: keys[1], Filename: "clip.mp4", IsVideo: true}, now); err != nil {
+		t.Fatalf("marking the video: %v", err)
+	}
+	for key, size := range map[string]int64{keys[0]: 2_000_000, keys[1]: 3_000_000_000} {
+		item := store.MediaItem{MediaKey: key, Filename: key, LocalPath: "/pool/" + key, SizeBytes: size, SHA256: key}
+		if err := server.store.MarkDownloaded(item, now); err != nil {
+			t.Fatalf("marking %s downloaded: %v", key, err)
+		}
+	}
+
+	body := get(handler, "/", cookie).Body.String()
+	if !strings.Contains(body, `<span class="stat-value">3.0 GB</span> <span class="stat-label">on disk</span>`) {
+		t.Errorf("the summary does not say what the backup takes; body was:\n%s", body)
+	}
+	if !strings.Contains(body, "photos 2.0 MB · videos 3.0 GB") {
+		t.Errorf("the summary does not split photos from videos; body was:\n%s", body)
 	}
 }

@@ -25,10 +25,12 @@
       <p class="stat"><span class="stat-value">{{count .Done}}</span> <span class="stat-label">backed up</span></p>
       <p class="stat"><span class="stat-value">{{count .Pending}}</span> <span class="stat-label">to go</span></p>
       {{if .Failed}}<p class="stat bad"><span class="stat-value">{{count .Failed}}</span> <span class="stat-label">failed</span></p>{{end}}
+      <p class="stat"><span class="stat-value">{{.OnDisk}}</span> <span class="stat-label">on disk</span></p>
     </div>
+    <p class="small muted">photos {{.Photos}} · videos {{.Videos}}</p>
     <div class="meter" role="progressbar" aria-valuenow="{{.Done}}" aria-valuemin="0"
          aria-valuemax="{{.Known}}" aria-label="Backup completion"><span style="width: {{.Percent}}%"></span></div>
-    <p class="small muted">{{.Percent}}% · {{.OnDisk}} on disk{{with .Free}} · {{.}} free{{end}}</p>
+    <p class="small muted">{{.Percent}}%{{with .Free}} · {{.}} free{{end}}</p>
     {{if .Cramped}}
     <p class="banner warn" role="status">
       Only {{.Free}} is left where the photos go. A run stops when it gets that low rather than
