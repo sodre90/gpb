@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.4.0 — 2026-09-23
+
+- **A photo held under two keys is now one file on disk.** Google gives one photograph a key in
+  each album and another on the library timeline, so a library followed alongside its albums
+  fetched it twice: 20,795 photos and 626 GB of the pool this was built against. A download
+  whose bytes are already held, and still hash to their record, becomes a hardlink to that file,
+  and every backup ends by linking whatever copies are still separate — both re-read and checked
+  first, one that does not check out left as it is. **The first backup after upgrading converts
+  every copy an older release made, which on a large pool is hours of reading;** the Review page
+  counts what is left and has a button to do it sooner, and so does `gpb duplicates --link`
+  between backups. Each key keeps its row and its name, so every album still shows the photo.
+- **Anything that copies the pool elsewhere now has to keep hardlinks** — `rsync -H`, or the
+  copy stores those photos twice again. Both deploy guides say so.
+- **The overview's "on disk" counts a shared photo once.** Until the first linking pass has run,
+  it reads lower than the disk really holds by what is still kept twice.
+- **The daemon re-reads the whole backup once a month** and checks every file against its hash,
+  since the container has no cron to run `gpb verify` from. It never starts during a backup,
+  repairs nothing, and fires the notify hook as `verify_problems` if anything has rotted;
+  `<data>/verify.last` says when it last finished and what it found.
+- **`gpb probe` asks Google for an item exactly as a run would and says what came back** — the
+  host, the type and size, whether it is a motion photo carrying its video or only declaring
+  one, a zip, and whether the bytes match the file kept. It changes nothing, and prints the host
+  of a signed address, never the address. It is for three questions a backup cannot answer about
+  itself: motion photos, edited photos, and how long a download address stays good.
+- **Signed download addresses no longer reach the log or an item's recorded error.** A failed
+  fetch used to repeat its whole URL, which is a credential for that file for as long as it
+  lives. Logs written by an earlier release may still hold some.
+- **Built with Go 1.26.6.** 1.26.4 carried eight vulnerabilities in code gpb reaches.
+
 ## 0.3.3 — 2026-09-14
 
 - **An idle daemon no longer spends a tenth of a core counting the backup.** The Home
