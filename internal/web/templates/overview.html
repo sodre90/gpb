@@ -27,7 +27,7 @@
       {{if .Failed}}<p class="stat bad"><span class="stat-value">{{count .Failed}}</span> <span class="stat-label">failed</span></p>{{end}}
       <p class="stat"><span class="stat-value">{{.OnDisk}}</span> <span class="stat-label">on disk</span></p>
     </div>
-    <p class="small muted">photos {{.Photos}} · videos {{.Videos}}</p>
+    <p class="small muted">photos {{.Photos}} · videos {{.Videos}}{{with .Unlinked}} · {{.}} in second copies not yet linked{{end}}</p>
     <div class="meter" role="progressbar" aria-valuenow="{{.Done}}" aria-valuemin="0"
          aria-valuemax="{{.Known}}" aria-label="Backup completion"><span style="width: {{.Percent}}%"></span></div>
     <p class="small muted">{{.Percent}}%{{with .Free}} · {{.}} free{{end}}</p>

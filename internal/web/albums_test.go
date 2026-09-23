@@ -497,3 +497,36 @@ func TestTheSummarySaysWhatTheBackupTakesAndHowMuchIsVideo(t *testing.T) {
 		t.Errorf("the summary does not split photos from videos; body was:\n%s", body)
 	}
 }
+
+// Until the linking pass reaches them, the second copies of a photo held under two keys are files
+// of their own. The store counts the photo once, so the figure has to add them back or it says
+// the pool takes less than the disk shows — 854.6 GB against 1,432 GB on the box, 2026-09-23.
+func TestTheSummaryCountsSecondCopiesNotYetLinked(t *testing.T) {
+	server, _ := testServer(t)
+	handler := server.Handler()
+	cookie := login(t, handler)
+
+	seedAlbums(t, server, store.Album{ID: "holiday", Title: "Holiday 2026", ItemCount: 1})
+	if err := server.store.SetAlbumSyncMode("holiday", store.SyncAll); err != nil {
+		t.Fatalf("following an album: %v", err)
+	}
+	keys := seedItems(t, server, "holiday", 1)
+	item := store.MediaItem{MediaKey: keys[0], Filename: keys[0], LocalPath: "/pool/" + keys[0], SizeBytes: 3_000_000_000, SHA256: keys[0]}
+	if err := server.store.MarkDownloaded(item, time.Now()); err != nil {
+		t.Fatalf("marking downloaded: %v", err)
+	}
+	runsOf(server).copies = syncer.Linking{Photos: 1, Separate: 1, Held: 1_000_000_000}
+
+	body := get(handler, "/", cookie).Body.String()
+	if !strings.Contains(body, `<span class="stat-value">4.0 GB</span> <span class="stat-label">on disk</span>`) {
+		t.Errorf("the summary leaves out the copies not yet linked; body was:\n%s", body)
+	}
+	if !strings.Contains(body, "1.0 GB in second copies not yet linked") {
+		t.Errorf("the summary does not say why; body was:\n%s", body)
+	}
+
+	runsOf(server).copies = syncer.Linking{}
+	if body := get(handler, "/", cookie).Body.String(); strings.Contains(body, "not yet linked") {
+		t.Error("the summary still mentions unlinked copies once there are none")
+	}
+}

@@ -6,6 +6,7 @@ import (
 
 	"gpb/internal/auth"
 	"gpb/internal/store"
+	"gpb/internal/syncer"
 )
 
 // overviewView answers one question — is the backup healthy — and nothing else. Everything on
@@ -38,6 +39,9 @@ type backupCard struct {
 	OnDisk   string
 	Photos   string
 	Videos   string
+	// Unlinked is the second copies still kept as files of their own, which the store counts
+	// once and the disk holds twice until the linking pass reaches them. Empty once it has.
+	Unlinked string
 	// Free is what the pool's filesystem has left, and Cramped whether that is less than the
 	// floor a run stops at. A library is far larger than the disk it is usually pointed at, and
 	// the difference is only interesting before a run hits it: afterwards the run has already
@@ -47,8 +51,8 @@ type backupCard struct {
 	Cramped bool
 }
 
-func backupCardFor(set store.BackupSet) backupCard {
-	return backupCard{
+func backupCardFor(set store.BackupSet, separate syncer.Linking) backupCard {
+	card := backupCard{
 		Albums:   set.Albums,
 		Library:  set.Library,
 		Empty:    set.Empty(),
@@ -59,10 +63,14 @@ func backupCardFor(set store.BackupSet) backupCard {
 		Pending:  set.Pending,
 		Failed:   set.Failed,
 		Percent:  percentOf(set.Done, set.Known),
-		OnDisk:   humanBytes(set.Bytes),
+		OnDisk:   humanBytes(set.Bytes + separate.Held),
 		Photos:   humanBytes(set.Bytes - set.VideoBytes),
 		Videos:   humanBytes(set.VideoBytes),
 	}
+	if separate.Held > 0 {
+		card.Unlinked = humanBytes(separate.Held)
+	}
+	return card
 }
 
 func (s *Server) roomLeft(card backupCard) backupCard {
@@ -111,9 +119,10 @@ func (s *Server) overviewView() (overviewView, error) {
 		return overviewView{}, err
 	}
 
+	separate, _ := s.runs.SeparateCopies()
 	status := s.auth.Status()
 	view := overviewView{
-		Backup:  s.roomLeft(backupCardFor(set)),
+		Backup:  s.roomLeft(backupCardFor(set, separate)),
 		Now:     s.nowCard(),
 		Waiting: s.waitingForReview(),
 		Session: sessionCard{
