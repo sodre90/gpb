@@ -421,6 +421,13 @@ took the urgency out of it, since a run no longer dies at the first bad album; b
 against genuinely drifted decoders still walks every followed album before concluding as
 much, and that request budget is what a canary would save.
 
+*Decided against, 2026-09-22.* The budget is small: decoders that no longer fit fail on each
+album's first page, so the whole walk costs one request per followed album — under two minutes
+at the sync bucket's 2 req/s — and the album listing that opens every run already exercises the
+album decoder. Against that, a canary would have to treat its one album as speaking for all of
+them, and the album that drifts alone is exactly the case stepping over was built for: a canary
+that happened to pick it would end a run the walk would have finished.
+
 Writing the offending payload to a file for later study is **not built** either. The skeleton
 in the error is what a maintainer actually reads, and it reaches them through the log and the
 run page without a new directory to secure: a whole payload is media keys, signed URLs and
@@ -703,7 +710,8 @@ Host side these are bind mounts from local disk on the Fedora box — proposed
 
 ## 9. Sync engine
 
-A run is: **warmup → canary → list → plan → download → report.**
+A run is: **warmup → list → plan → download → report.** (The canary once planned between
+warmup and list was decided against; §5 says why.)
 
 - **List:** enumerate albums (upsert all, so the web UI is always current), then page
   through each followed album and, if `[Library]` is followed, the timeline. Update
