@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2 — 2026-09-23
+
+- **The overview's "on disk" now includes the second copies not yet linked.** 0.4.1 counted a
+  photo held under two keys once, even while an older release still kept it as two files, so a
+  pool `du` measured at 1,432 GB read as 854.6 GB. Those files are now added in, and named on
+  the line under the figure until the linking pass has made them one.
+
 ## 0.4.1 — 2026-09-23
 
 - **The overview says what the backup takes on disk, and how much of it is video.** The size
