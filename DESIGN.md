@@ -674,9 +674,10 @@ Host side these are bind mounts from local disk on the Fedora box — proposed
   back to upload date, else `pool/unknown/`.
 - **Originals are byte-for-byte untouched** — that is the entire point of the web download
   path. EXIF (including GPS) lives inside the files; nothing is rewritten.
-- Google-side metadata that is *not* inside the file (description, favorite flag, album
-  membership, upstream deletion time) lives in SQLite only. Per-file JSON sidecar export is
-  deliberately deferred (open question) — sidecars are what made Takeout messy.
+- Google-side metadata that is *not* inside the file lives in SQLite only: album membership,
+  Google's capture time, and when an item went from Google. Descriptions and the per-photo
+  favourite flag were once listed here too; the listing decoders have never read either, so the
+  store does not hold them. No sidecars are written (§19, question 8).
 - **Album-structured browsing** lives at `/photos/albums/<title>/`, one entry per followed
   album, each holding one **symlink** per downloaded item named as the camera named it. The
   pool plus the DB remains the backup; this tree is a convenience and holds nothing that is
@@ -1722,6 +1723,8 @@ a network filesystem — local disk.)*
 8. (A) **No per-file JSON sidecars in v1**; Google-side metadata lives in SQLite only.
    Confirm — this matters if the pool should be portable into other photo tools that read
    sidecars.
+   *Settled 2026-09-22: no export.* What the store adds to the files is album membership, which
+   `<photos>/albums/` already shows, and a capture time; an XMP export was weighed and dropped.
 9. (A) **Notification = exec hook** wired to the existing Telegram notifier; no built-in
    channels.
 10. (?) **Edited photos.** Which variant does the web download endpoint return for edited
