@@ -1588,6 +1588,11 @@ a network filesystem — local disk.)*
    GPS, and a 4K 16:9 re-encode instead of native resolution. It would produce backups
    that fail silently. §8's fidelity checks should assert an APP1/Exif marker on stored
    stills so this can never creep in.
+   *Met differently (2026-09-22):* the downloader refuses every host but the two content hosts
+   below, so an `lh3` URL cannot be fetched at all, and a test pins that refusal. The Exif
+   assertion lives in the live contract test instead of the write path, because a stored still
+   with no Exif is ordinary — screenshots, images saved from messengers, PNGs — and a check
+   there would fail real photographs.
 
    **URL minting also resolved.** `VrseUb` with payload
    `[mediaKey, null, null, null, albumId]` returns a signed download URL at `[1]`. The
