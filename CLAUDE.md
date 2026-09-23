@@ -32,7 +32,7 @@ go run ./cmd/gpb passwd     # set the web password; the one step with no default
 go run ./cmd/gpb daemon     # serves http://localhost:8080
 ```
 
-Go 1.26.4 or later. `GPB_DATA_DIR`, `GPB_PHOTOS_DIR`, `GPB_CHROME_PATH`, `GPB_NOVNC_DIR` and
+Go 1.26.6 or later. `GPB_DATA_DIR`, `GPB_PHOTOS_DIR`, `GPB_CHROME_PATH`, `GPB_NOVNC_DIR` and
 `TZ` are the only environment overrides; everything else lives in `$GPB_DATA_DIR/config.toml`.
 
 ## Layout

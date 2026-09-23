@@ -1,6 +1,6 @@
-# go.mod asks for 1.26.4; the floor is never below 1.25.1, whose http.CrossOriginProtection
-# fixed the bypass 1.25.0 shipped with (CVE-2025-47910).
-FROM golang:1.26-bookworm AS build
+# Pinned to the patch release go.mod asks for, so a cached builder image cannot bring back a
+# standard-library fix the floor was raised for (DESIGN.md §15).
+FROM golang:1.26.6-bookworm AS build
 
 WORKDIR /src
 COPY go.mod go.sum ./

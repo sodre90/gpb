@@ -1332,11 +1332,15 @@ no hidden form fields — and all mutating endpoints are POST, never GET. Turnin
 browser's own definition and `Sec-Fetch-Site` starts arriving. A second reason it is worth
 turning on, and one nobody would think to look for.
 
-**Build requires the toolchain `go.mod` asks for — currently Go 1.26.4 — and never one below
+**Build requires the toolchain `go.mod` asks for — currently Go 1.26.6 — and never one below
 1.25.1.** Go 1.25.0 shipped `CrossOriginProtection` with a bypass-pattern flaw
 (CVE-2025-47910) that let some cross-origin POSTs through; 1.25.1 tightened it to exact
-matches. The version lives in `go.mod`, with the builder image tracking the same major line,
-so a stale base image cannot silently reintroduce it.
+matches. The version lives in `go.mod`, with the builder image pinned to the same patch
+release, so a stale base image cannot silently reintroduce it.
+
+The floor moves whenever `govulncheck` finds a standard-library fix that gpb's own code reaches.
+It was raised from 1.26.4 to 1.26.6 on 2026-09-22 for eight of them, among them an `os.Root`
+escape through a symlink and a trailing slash, in a call that `openInPool` reaches.
 
 ### Login rate limiting
 

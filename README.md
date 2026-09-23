@@ -179,7 +179,7 @@ chain is skipped because macOS Chrome is a Cocoa app that cannot render into an 
 Chrome is found automatically under `/Applications`; point `GPB_CHROME_PATH` at it if you keep it
 elsewhere.
 
-Requires Go 1.26.4 or later.
+Requires Go 1.26.6 or later.
 
 ## Configuration
 
