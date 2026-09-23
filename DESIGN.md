@@ -1641,10 +1641,12 @@ a network filesystem — local disk.)*
    browser fallback can be dropped from Phase 2 scope (keep the interface; it costs
    nothing and is the natural seam if this drifts).
 
-   Remaining sub-question: **signed-URL lifetime is unmeasured**, which matters for how
-   long a sync run may hold a minted URL before fetching. Phase 2 sidesteps it by minting
-   per fetch attempt rather than caching URLs across a run, so a resume gets a fresh URL
-   instead of a mysterious 403. Worth measuring anyway if minting ever becomes a bottleneck.
+   Remaining sub-question: **how long a signed URL lives**, which matters for how long a sync
+   run may hold a minted URL before fetching. Phase 2 sidesteps it by minting per fetch
+   attempt rather than caching URLs across a run, so a resume gets a fresh URL instead of a
+   mysterious 403. Measured on 2026-09-24 with `gpb probe --again-after 1h`: one URL on
+   each host (`video-downloads` and `photos.fife`) still served the same bytes an hour after
+   it was minted. That is a floor, not the lifetime; nothing yet needs the ceiling.
 
    **NEW, Phase 2 — `VrseUb` mints on two hosts, and both serve originals.** Measured live
    on 2026-08-10. The same call answers some items with a
