@@ -31,7 +31,7 @@ func seedPickedItem(t *testing.T, server *Server, albumID, mediaKey string, at t
 	if err := server.store.UpsertItem(store.MediaItem{MediaKey: mediaKey, Filename: mediaKey + ".jpg"}, at); err != nil {
 		t.Fatalf("seeding item %s: %v", mediaKey, err)
 	}
-	if err := server.store.LinkItemToAlbum(albumID, mediaKey, at); err != nil {
+	if err := server.store.LinkItemToAlbum(albumID, mediaKey); err != nil {
 		t.Fatalf("linking %s to %s: %v", mediaKey, albumID, err)
 	}
 }

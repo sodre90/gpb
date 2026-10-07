@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -33,6 +34,17 @@ const waitingForReview = `
 // Google has lost can only be acknowledged. An item flagged in any other state — a new one that
 // has since been downloaded — has no question left to answer.
 var reviewStates = []State{StateDiscovered, StateMissingUpstream}
+
+// AwaitsReview is whether the queue has a question to ask about the item. A flag in any other
+// state is left over — an arrival since downloaded, or a write-off that a download overwrote
+// before 0.5.0 — and a mark or a count drawn from it points at a queue with nothing in it.
+func (item MediaItem) AwaitsReview() bool {
+	return item.NeedsReview && slices.Contains(reviewStates, item.State)
+}
+
+// flaggedWithAQuestion is AwaitsReview for a count taken in SQL.
+const flaggedWithAQuestion = `mi.needs_review = 1 AND mi.state IN ('` +
+	string(StateDiscovered) + `', '` + string(StateMissingUpstream) + `')`
 
 // CountNeedingReview is the nav's pill. It counts items rather than groups: the pill answers
 // "how much is waiting", and one album holding forty new photos is forty things to look at.

@@ -15,19 +15,23 @@ func TestAFinishedRunAppearsInHistoryWithItsOutcomeAndCounts(t *testing.T) {
 	handler := server.Handler()
 	cookie := login(t, handler)
 
-	id, err := server.store.StartRun(time.Now())
+	// Both ends carry nanoseconds, as every real run's do. A start rounded to the second hid that
+	// the page printed "14m26.524349052s".
+	started := time.Date(2026, 10, 7, 1, 30, 57, 788_855_299, time.UTC)
+	ended := started.Add(3*time.Minute + 7*time.Second + 211_000_000)
+	id, err := server.store.StartRun(started)
 	if err != nil {
 		t.Fatalf("starting a run: %v", err)
 	}
 	finished := store.SyncRun{
 		ID: id, Outcome: store.OutcomeOK, Listed: 4211, Downloaded: 122, Bytes: 47_000_000,
 	}
-	if err := server.store.FinishRun(finished, time.Now()); err != nil {
+	if err := server.store.FinishRun(finished, ended); err != nil {
 		t.Fatalf("finishing the run: %v", err)
 	}
 
 	body := get(handler, "/runs", cookie).Body.String()
-	for _, want := range []string{"4,211", "122", "ok"} {
+	for _, want := range []string{"4,211", "122", "ok", humanTime(ended), "took 3m7s<"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the run history is missing %q; body was:\n%s", want, body)
 		}

@@ -273,7 +273,9 @@ func inventAlbums(t *testing.T, db *store.Store, now time.Time) {
 		t.Fatalf("starring an album: %v", err)
 	}
 
-	if err := db.SetLibrary(store.SyncAll, year(2015, 1, 1)); err != nil {
+	if err := db.SetLibrary(store.LibraryInstruction{
+		Mode: store.SyncAll, Since: year(2015, 1, 1), NewOnly: true, WeeklyFullWalk: true,
+	}); err != nil {
 		t.Fatalf("following the whole library: %v", err)
 	}
 }
@@ -298,7 +300,7 @@ func inventItems(t *testing.T, db *store.Store, album invented, now time.Time) {
 		if err := db.UpsertItem(item, now.Add(-40*24*time.Hour)); err != nil {
 			t.Fatalf("inventing an item in %s: %v", album.title, err)
 		}
-		if err := db.LinkItemToAlbum(album.id, key, now.Add(-40*24*time.Hour)); err != nil {
+		if err := db.LinkItemToAlbum(album.id, key); err != nil {
 			t.Fatalf("filing an item under %s: %v", album.title, err)
 		}
 
@@ -308,7 +310,6 @@ func inventItems(t *testing.T, db *store.Store, album invented, now time.Time) {
 			finished.Filename = inventedFilename(key, item.IsVideo)
 			finished.SizeBytes = inventedSize(key, item.IsVideo)
 			finished.LocalPath = filepath.Join("pool", finished.CapturedAt.Format("2006/01"), finished.Filename)
-			finished.MimeType = inventedMimeType(item.IsVideo)
 			if err := db.MarkDownloaded(finished, now.Add(-time.Duration(index)*13*time.Minute)); err != nil {
 				t.Fatalf("marking an item downloaded in %s: %v", album.title, err)
 			}
@@ -397,13 +398,6 @@ func inventedSize(key string, video bool) int64 {
 		return int64(38_000_000 + scatter(key+"/size", 560)*1_000_000)
 	}
 	return int64(1_700_000 + scatter(key+"/size", 5_400)*1_000)
-}
-
-func inventedMimeType(video bool) string {
-	if video {
-		return "video/quicktime"
-	}
-	return "image/heic"
 }
 
 func inventRuns(t *testing.T, db *store.Store, now time.Time) {

@@ -84,9 +84,11 @@ func (s *Syncer) recordListing(ctx context.Context, fetch listing,
 
 // list refreshes every album, then walks the followed ones and, if it is followed, the library.
 //
-// Every run walks everything again rather than resuming where the last one stopped, and that is
-// deliberate: seeing all of an album is what lets listAlbum infer that the items it did not see
-// have gone from Google. A resumable walk would be faster and would never notice a deletion.
+// Every run walks every followed album again rather than resuming where the last one stopped, and
+// that is deliberate: seeing all of an album is what lets listAlbum infer that the items it did not
+// see have gone from Google. A resumable walk would be faster and would never notice a deletion.
+// The library can be told to stop at what it already holds — see listLibrary — and walks whole
+// once a week for the same reason, unless the user has given that up too.
 //
 // Each phase is timed because the run log used to print one total at the end, which said nothing
 // about where a long run spent its time.
@@ -122,7 +124,7 @@ func (s *Syncer) list(ctx context.Context) (listingResult, error) {
 	}
 
 	libraryStartedAt := time.Now()
-	count, err := s.listLibrary(ctx, library.Since)
+	count, err := s.listLibrary(ctx, library)
 	log.Printf("syncer: listing finished in %s — %d albums in %s, the library walk in %s",
 		since(startedAt), len(followed), albumTime, since(libraryStartedAt))
 	result.listed += count
@@ -271,10 +273,15 @@ func (s *Syncer) listAlbum(ctx context.Context, albumID string) (int, error) {
 	listedAt := time.Now()
 	listed := 0
 
-	alreadyIn, err := s.membersToCompareAgainst(albumID)
+	members, err := s.store.AlbumMembers(albumID)
 	if err != nil {
 		return listed, err
 	}
+	arrivalsMatter, err := s.arrivalsMatter(albumID)
+	if err != nil {
+		return listed, err
+	}
+	seen := map[string]bool{}
 	var arrived []string
 
 	for token := ""; ; {
@@ -287,12 +294,13 @@ func (s *Syncer) listAlbum(ctx context.Context, albumID string) (int, error) {
 			if err := s.store.UpsertItem(toStoreItem(item), listedAt); err != nil {
 				return listed, err
 			}
-			if err := s.store.LinkItemToAlbum(albumID, item.MediaKey, listedAt); err != nil {
+			if err := s.store.LinkItemToAlbum(albumID, item.MediaKey); err != nil {
 				return listed, err
 			}
-			if alreadyIn != nil && !alreadyIn[item.MediaKey] {
+			if _, alreadyHere := members[item.MediaKey]; arrivalsMatter && !alreadyHere {
 				arrived = append(arrived, item.MediaKey)
 			}
+			seen[item.MediaKey] = true
 			listed++
 			s.live.listed.Add(1)
 		}
@@ -310,7 +318,7 @@ func (s *Syncer) listAlbum(ctx context.Context, albumID string) (int, error) {
 		return listed, err
 	}
 
-	departed, err := s.store.ReconcileAlbum(albumID, listedAt)
+	departed, err := s.store.Reconcile(albumID, departures(members, seen, time.Time{}), listedAt)
 	if err != nil {
 		return listed, err
 	}
@@ -405,20 +413,17 @@ func kindNoun(kind store.AlbumKind) string {
 	}
 }
 
-// membersToCompareAgainst returns what the album held before this listing, or nil when nothing
-// arriving in it could need a decision. Two albums answer nil: one synced 'all' or 'none', where
-// a new item is downloaded or ignored without anyone being asked, and one never walked before,
-// where every item would look new and the user would be handed a review queue the size of the
-// album for merely having pressed refresh. The first walk is the baseline, not a change to it.
-func (s *Syncer) membersToCompareAgainst(albumID string) (map[string]bool, error) {
+// arrivalsMatter says whether an item new to this album needs a decision from the user. Two
+// albums answer no: one synced 'all' or 'none', where a new item is downloaded or ignored without
+// anyone being asked, and one never walked before, where every item would look new and the user
+// would be handed a review queue the size of the album for merely having pressed refresh. The
+// first walk is the baseline, not a change to it.
+func (s *Syncer) arrivalsMatter(albumID string) (bool, error) {
 	album, err := s.store.Album(albumID)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	if album.SyncMode != store.SyncPicked || album.LastSyncedAt.IsZero() {
-		return nil, nil
-	}
-	return s.store.MembersOf(albumID)
+	return album.SyncMode == store.SyncPicked && !album.LastSyncedAt.IsZero(), nil
 }
 
 // flagArrivals holds back items that turned up in a 'picked' album since it was last walked.

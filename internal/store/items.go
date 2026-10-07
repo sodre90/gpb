@@ -3,6 +3,8 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -26,14 +28,12 @@ type MediaItem struct {
 	Filename     string
 	CapturedAt   time.Time
 	SizeBytes    int64
-	MimeType     string
 	SHA256       string
 	State        State
 	FailCount    int
 	LastError    string
 	LocalPath    string
 	FirstSeenAt  time.Time
-	LastSeenAt   time.Time
 	DownloadedAt time.Time
 	MissingSince time.Time
 	NeedsReview  bool
@@ -42,9 +42,13 @@ type MediaItem struct {
 }
 
 // UpsertItem records an item seen in a listing, without disturbing anything the download
-// path owns. A re-listing refreshes what Google reports and the last-seen stamp; it must not
-// reset state, fail_count or the local path, or every nightly run would re-download the
-// library.
+// path owns. A re-listing refreshes what Google reports; it must not reset state, fail_count
+// or the local path, or every nightly run would re-download the library.
+//
+// The update is conditional on something having actually changed, which for a library under
+// backup is almost never. Writing the row regardless cost a row update for every item a walk
+// re-lists — 97,860 a night on the library this was measured on — and SQLite's WAL turned that
+// into gigabytes a day of block I/O.
 //
 // The one state a re-listing does overturn is missing_upstream, because a listing is direct
 // evidence against it. Clearing missing_since alone was not enough: Pending looks for the
@@ -52,6 +56,13 @@ type MediaItem struct {
 // missing_upstream is in neither set and would never be fetched or verified again however
 // many times Google showed it. It returns to done if there is a file to return to, and to
 // discovered otherwise — and stops asking for a review it no longer needs.
+//
+// A missing_since on an item that is not missing_upstream is let through as well. Up to 0.4.2 a
+// download that finished while the same run wrote its item off left the item done with the date
+// still set. The download path no longer does (see unlessWrittenOff), but the rows it left are
+// still in databases, and Reconcile treats any item with a missing_since as already written off
+// — so left alone, that photo's real disappearance later would drop it from the album without a
+// word.
 //
 // filename is written on insert and never updated, because a listing does not carry one —
 // the caller passes the media key as a placeholder, and the real name arrives with the
@@ -61,16 +72,13 @@ type MediaItem struct {
 // thumbnail_url is the opposite case: the listing is its only source, so a re-listing
 // refreshes it. Measured live, the URL is an opaque content id with no signature or expiry,
 // but a refresh costs nothing and covers us if that ever stops being true.
-func (s *Store) UpsertItem(item MediaItem, seenAt time.Time) error {
-	seen := formatTime(seenAt)
+func (s *Store) UpsertItem(item MediaItem, firstSeenAt time.Time) error {
 	_, err := s.db.Exec(`
-		INSERT INTO media_items (media_key, filename, captured_at, mime_type, state,
-			first_seen_at, last_seen_at, thumbnail_url, is_video)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO media_items (media_key, filename, captured_at, state,
+			first_seen_at, thumbnail_url, is_video)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(media_key) DO UPDATE SET
 			captured_at = excluded.captured_at,
-			mime_type = excluded.mime_type,
-			last_seen_at = excluded.last_seen_at,
 			thumbnail_url = excluded.thumbnail_url,
 			is_video = excluded.is_video,
 			missing_since = NULL,
@@ -78,22 +86,32 @@ func (s *Store) UpsertItem(item MediaItem, seenAt time.Time) error {
 			state = CASE
 				WHEN state != ? THEN state
 				WHEN local_path IS NOT NULL THEN ?
-				ELSE ? END`,
-		item.MediaKey, item.Filename, nullableTime(item.CapturedAt), nullEmpty(item.MimeType),
-		string(StateDiscovered), seen, seen, nullEmpty(item.ThumbnailURL), item.IsVideo,
+				ELSE ? END
+		WHERE captured_at IS NOT excluded.captured_at
+			OR thumbnail_url IS NOT excluded.thumbnail_url
+			OR is_video != excluded.is_video
+			OR state = ?
+			OR missing_since IS NOT NULL`,
+		item.MediaKey, item.Filename, nullableTime(item.CapturedAt),
+		string(StateDiscovered), formatTime(firstSeenAt),
+		nullEmpty(item.ThumbnailURL), item.IsVideo,
 		string(StateMissingUpstream), string(StateMissingUpstream),
-		string(StateDone), string(StateDiscovered))
+		string(StateDone), string(StateDiscovered), string(StateMissingUpstream))
 	if err != nil {
 		return fmt.Errorf("upserting media item: %w", err)
 	}
 	return nil
 }
 
-func (s *Store) LinkItemToAlbum(albumID, mediaKey string, seenAt time.Time) error {
+// LinkItemToAlbum records that a listing found an item in an album. A link that is already there
+// is left exactly as it is: the walk's own memory of what it saw is what reconciliation reads, so
+// re-pressing the same fact into the row ninety thousand times a night said nothing and cost a
+// page write each.
+func (s *Store) LinkItemToAlbum(albumID, mediaKey string) error {
 	_, err := s.db.Exec(`
-		INSERT INTO album_items (album_id, media_key, last_seen_at) VALUES (?, ?, ?)
-		ON CONFLICT(album_id, media_key) DO UPDATE SET last_seen_at = excluded.last_seen_at`,
-		albumID, mediaKey, formatTime(seenAt))
+		INSERT INTO album_items (album_id, media_key) VALUES (?, ?)
+		ON CONFLICT(album_id, media_key) DO NOTHING`,
+		albumID, mediaKey)
 	if err != nil {
 		return fmt.Errorf("linking item to album: %w", err)
 	}
@@ -201,8 +219,15 @@ func (s *Store) ItemStoredAs(fileName string) (MediaItem, error) {
 	}
 }
 
+// unlessWrittenOff is the state a download-path write leaves an item in. Listing and downloading
+// run side by side, so a walk can write an item off between a worker taking it and the worker
+// reporting back, and the worker's word is older: overwriting the write-off left a done item still
+// dated missing, which the next walk read as already handled and the review queue still counted.
+// A file that did arrive is still recorded — a written-off item keeps its file, like any other.
+const unlessWrittenOff = `CASE WHEN state = '` + string(StateMissingUpstream) + `' THEN state ELSE ? END`
+
 func (s *Store) SetItemState(mediaKey string, state State) error {
-	result, err := s.db.Exec(`UPDATE media_items SET state = ? WHERE media_key = ?`,
+	result, err := s.db.Exec(`UPDATE media_items SET state = `+unlessWrittenOff+` WHERE media_key = ?`,
 		string(state), mediaKey)
 	if err != nil {
 		return fmt.Errorf("setting item state: %w", err)
@@ -215,11 +240,11 @@ func (s *Store) SetItemState(mediaKey string, state State) error {
 func (s *Store) MarkDownloaded(item MediaItem, at time.Time) error {
 	result, err := s.db.Exec(`
 		UPDATE media_items SET
-			state = ?, local_path = ?, size_bytes = ?, sha256 = ?, mime_type = ?,
+			state = `+unlessWrittenOff+`, local_path = ?, size_bytes = ?, sha256 = ?,
 			filename = ?, downloaded_at = ?, fail_count = 0, last_error = NULL
 		WHERE media_key = ?`,
 		string(StateDone), item.LocalPath, item.SizeBytes, nullEmpty(item.SHA256),
-		nullEmpty(item.MimeType), item.Filename, formatTime(at), item.MediaKey)
+		item.Filename, formatTime(at), item.MediaKey)
 	if err != nil {
 		return fmt.Errorf("marking the item downloaded: %w", err)
 	}
@@ -230,7 +255,7 @@ func (s *Store) MarkDownloaded(item MediaItem, at time.Time) error {
 // failing, and records the reason for the review queue rather than only the log.
 func (s *Store) MarkFailed(mediaKey string, cause error) error {
 	result, err := s.db.Exec(`
-		UPDATE media_items SET state = ?, fail_count = fail_count + 1, last_error = ?
+		UPDATE media_items SET state = `+unlessWrittenOff+`, fail_count = fail_count + 1, last_error = ?
 		WHERE media_key = ?`,
 		string(StateFailed), cause.Error(), mediaKey)
 	if err != nil {
@@ -292,71 +317,66 @@ type Departures struct {
 	Copies         int
 }
 
-// ReconcileAlbum records what a complete listing of one album implies about the items it no
-// longer contains. A full walk is what makes the inference safe, so a caller must never reach
-// here with a partial one.
+// Reconcile records what a listing implies about the members it no longer holds. The caller
+// passes the members the walk was obliged to see and did not — a set the walk already has, being
+// the membership that was there when it started, less everything it went past. Only that set is
+// passed, so a walk that vouches for part of an album vouches with part of its departures and
+// this has no window of its own to apply.
 //
 // Two different facts come out of that one observation, and reading them as a single fact is
 // how a photo removed from one album came to be recorded as gone from Google everywhere:
 // having left this album is certain, while having gone from Google is only true if nothing
 // else still lists it. The second question is asked of every other album's membership, which
-// is the only evidence there is — the library walk is deliberately not reconciled, so an item
-// it still lists is taken at its word and the item is held rather than written off. Erring
-// that way keeps backing up a photo Google has deleted, which costs disk; erring the other way
-// writes off a photo that is still there, which costs the backup.
+// is the only evidence there is — a photo taken out of an album is still in the library, and
+// the library is an album like any other for this purpose. Erring that way keeps backing up a
+// photo Google has deleted, which costs disk; erring the other way writes off a photo that is
+// still there, which costs the backup.
 //
 // The membership row is deleted rather than left to age, so the album grid shows the album as
 // it is now and a second run over the same absence finds nothing left to do. An item written
 // off keeps its membership instead: the review queue groups by the album an item was found in,
 // and for an item nothing else lists, this album is the only place it can be asked about — the
 // one thing the queue exists to report would otherwise be the one thing it could never show.
-func (s *Store) ReconcileAlbum(albumID string, listedAt time.Time) (Departures, error) {
-	return s.reconcile(albumID, listedAt, time.Time{})
-}
+func (s *Store) Reconcile(albumID string, departed []string, listedAt time.Time) (Departures, error) {
+	if len(departed) == 0 {
+		return Departures{}, nil
+	}
 
-// ReconcileLibrary draws the same conclusions from a timeline walk, over the stretch of it the
-// walk can vouch for. No walk sees all of the timeline — the user's date bound stops it — and an
-// item below where it stopped is not missing, it is merely old. capturedFrom is where the
-// vouching starts: only items captured at or after it are reconciled. A zero capturedFrom is a
-// walk that reached the end of the timeline, which vouches for everything.
-//
-// A bounded walk also says nothing about an item whose capture date Google never reported: the
-// timeline is ordered by that date, so an item without one has no known place in it and cannot be
-// shown to have been passed over. Those keep their membership until a walk runs to the end.
-func (s *Store) ReconcileLibrary(capturedFrom, listedAt time.Time) (Departures, error) {
-	return s.reconcile(LibraryID, listedAt, capturedFrom)
-}
-
-func (s *Store) reconcile(albumID string, listedAt, capturedFrom time.Time) (Departures, error) {
 	listed := formatTime(listedAt)
-	vouchedItems, vouchedMembers, vouchedFor := vouchedWindow(capturedFrom)
-
 	tx, err := s.db.Begin()
 	if err != nil {
 		return Departures{}, fmt.Errorf("reconciling an album: %w", err)
 	}
 	defer tx.Rollback()
 
-	gone, err := tx.Exec(`
-		UPDATE media_items SET state = ?, missing_since = ?, needs_review = `+reviewUnlessACopyRemains+`
-		WHERE missing_since IS NULL
-		  AND media_key IN (
-				SELECT media_key FROM album_items WHERE album_id = ? AND last_seen_at < ?)
-		  AND NOT EXISTS (
-				SELECT 1 FROM album_items elsewhere
-				WHERE elsewhere.media_key = media_items.media_key
-				  AND elsewhere.album_id != ?)`+vouchedItems,
-		append([]any{string(StateMissingUpstream), listed, albumID, listed, albumID}, vouchedFor...)...)
-	if err != nil {
-		return Departures{}, fmt.Errorf("marking vanished items: %w", err)
-	}
+	left, writtenOff := 0, 0
+	for chunk := range slices.Chunk(departed, departureChunk) {
+		names, keys := keyList(chunk)
 
-	left, err := tx.Exec(`
-		DELETE FROM album_items WHERE album_id = ? AND last_seen_at < ?
-		  AND media_key NOT IN (SELECT media_key FROM media_items WHERE state = ?)`+vouchedMembers,
-		append([]any{albumID, listed, string(StateMissingUpstream)}, vouchedFor...)...)
-	if err != nil {
-		return Departures{}, fmt.Errorf("removing items from an album: %w", err)
+		goneArgs := append([]any{string(StateMissingUpstream), listed}, keys...)
+		gone, err := tx.Exec(`
+			UPDATE media_items SET state = ?, missing_since = ?, needs_review = `+reviewUnlessACopyRemains+`
+			WHERE missing_since IS NULL
+			  AND media_key IN (`+names+`)
+			  AND NOT EXISTS (
+					SELECT 1 FROM album_items elsewhere
+					WHERE elsewhere.media_key = media_items.media_key
+					  AND elsewhere.album_id != ?)`,
+			append(goneArgs, albumID)...)
+		if err != nil {
+			return Departures{}, fmt.Errorf("marking vanished items: %w", err)
+		}
+		writtenOff += rowsAffected(gone)
+
+		links := append([]any{albumID}, keys...)
+		removed, err := tx.Exec(`
+			DELETE FROM album_items WHERE album_id = ? AND media_key IN (`+names+`)
+			  AND media_key NOT IN (SELECT media_key FROM media_items WHERE state = ?)`,
+			append(links, string(StateMissingUpstream))...)
+		if err != nil {
+			return Departures{}, fmt.Errorf("removing items from an album: %w", err)
+		}
+		left += rowsAffected(removed)
 	}
 
 	var copies int
@@ -368,20 +388,23 @@ func (s *Store) reconcile(albumID string, listedAt, capturedFrom time.Time) (Dep
 	if err := tx.Commit(); err != nil {
 		return Departures{}, fmt.Errorf("reconciling an album: %w", err)
 	}
-	writtenOff := rowsAffected(gone)
-	return Departures{LeftTheAlbum: rowsAffected(left) + writtenOff, GoneFromGoogle: writtenOff, Copies: copies}, nil
+	return Departures{LeftTheAlbum: left + writtenOff, GoneFromGoogle: writtenOff, Copies: copies}, nil
 }
 
-// vouchedWindow narrows a reconciliation to the captures its listing saw all of, as a clause for
-// the items and one for their memberships. An album listing walks the album to its end and passes
-// a zero floor, which narrows nothing.
-func vouchedWindow(capturedFrom time.Time) (items, members string, bound []any) {
-	if capturedFrom.IsZero() {
-		return "", "", nil
+// departureChunk is how many keys one statement names. An album emptied upstream arrives as one
+// large list, and naming them all at once would run into SQLite's bound-parameter limit long
+// before a backup had a library that large.
+const departureChunk = 500
+
+// keyList is an IN clause of the given length and the arguments that fill it.
+func keyList(keys []string) (names string, args []any) {
+	placeholders := make([]string, len(keys))
+	args = make([]any, len(keys))
+	for at, key := range keys {
+		placeholders[at] = "?"
+		args[at] = key
 	}
-	return ` AND captured_at >= ?`,
-		` AND media_key IN (SELECT media_key FROM media_items WHERE captured_at >= ?)`,
-		[]any{formatTime(capturedFrom)}
+	return strings.Join(placeholders, ", "), args
 }
 
 func rowsAffected(result sql.Result) int {
@@ -392,23 +415,32 @@ func rowsAffected(result sql.Result) int {
 	return int(count)
 }
 
-// MembersOf is an album's current contents, for a caller that has to tell what a listing adds
-// from what it merely re-sees. Only 'picked' albums ask, and those are hand-curated, so the set
-// is a grid's worth rather than a library's.
-func (s *Store) MembersOf(albumID string) (map[string]bool, error) {
-	rows, err := s.db.Query(`SELECT media_key FROM album_items WHERE album_id = ?`, albumID)
+// AlbumMembers is an album's contents as they stand, each item carrying the capture date the
+// timeline is ordered by. A walk reads it before it starts, because both questions it has to
+// answer are about the difference: an item that was here and was not walked past has left, and
+// an item that was not here and was walked past has arrived.
+//
+// An item Google never dated comes back zero, which a walk that stopped at a date bound reads as
+// "no known place in the timeline" rather than as old — an item with no place in the order cannot
+// be shown to have been passed over.
+func (s *Store) AlbumMembers(albumID string) (map[string]time.Time, error) {
+	rows, err := s.db.Query(`
+		SELECT ai.media_key, mi.captured_at FROM album_items ai
+		LEFT JOIN media_items mi ON mi.media_key = ai.media_key
+		WHERE ai.album_id = ?`, albumID)
 	if err != nil {
 		return nil, fmt.Errorf("reading album membership: %w", err)
 	}
 	defer rows.Close()
 
-	members := map[string]bool{}
+	members := map[string]time.Time{}
 	for rows.Next() {
 		var key string
-		if err := rows.Scan(&key); err != nil {
+		var captured sql.NullString
+		if err := rows.Scan(&key, &captured); err != nil {
 			return nil, err
 		}
-		members[key] = true
+		members[key] = parseTime(captured)
 	}
 	return members, rows.Err()
 }
@@ -464,8 +496,8 @@ func (s *Store) Counts() (map[State]int, error) {
 	return counts, rows.Err()
 }
 
-const itemColumns = `media_key, filename, captured_at, size_bytes, mime_type, sha256, state,
-	fail_count, last_error, local_path, first_seen_at, last_seen_at, downloaded_at,
+const itemColumns = `media_key, filename, captured_at, size_bytes, sha256, state,
+	fail_count, last_error, local_path, first_seen_at, downloaded_at,
 	missing_since, needs_review, thumbnail_url, is_video`
 
 func (s *Store) queryItems(query string, args ...any) ([]MediaItem, error) {
@@ -479,25 +511,23 @@ func (s *Store) queryItems(query string, args ...any) ([]MediaItem, error) {
 	for rows.Next() {
 		var item MediaItem
 		var size sql.NullInt64
-		var mimeType, sha, lastError, localPath, thumbnailURL sql.NullString
-		var capturedAt, firstSeen, lastSeen, downloadedAt, missingSince sql.NullString
+		var sha, lastError, localPath, thumbnailURL sql.NullString
+		var capturedAt, firstSeen, downloadedAt, missingSince sql.NullString
 
-		if err := rows.Scan(&item.MediaKey, &item.Filename, &capturedAt, &size, &mimeType,
+		if err := rows.Scan(&item.MediaKey, &item.Filename, &capturedAt, &size,
 			&sha, &item.State, &item.FailCount, &lastError, &localPath, &firstSeen,
-			&lastSeen, &downloadedAt, &missingSince, &item.NeedsReview, &thumbnailURL,
+			&downloadedAt, &missingSince, &item.NeedsReview, &thumbnailURL,
 			&item.IsVideo); err != nil {
 			return nil, fmt.Errorf("scanning a media item: %w", err)
 		}
 
 		item.SizeBytes = size.Int64
-		item.MimeType = mimeType.String
 		item.SHA256 = sha.String
 		item.LastError = lastError.String
 		item.LocalPath = localPath.String
 		item.ThumbnailURL = thumbnailURL.String
 		item.CapturedAt = parseTime(capturedAt)
 		item.FirstSeenAt = parseTime(firstSeen)
-		item.LastSeenAt = parseTime(lastSeen)
 		item.DownloadedAt = parseTime(downloadedAt)
 		item.MissingSince = parseTime(missingSince)
 		items = append(items, item)

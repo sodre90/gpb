@@ -72,10 +72,16 @@ type Album struct {
 	// Since is the oldest capture date worth walking, and only the library row carries one. The
 	// timeline arrives newest first, so it bounds the listing as well as the download: without
 	// it, following the library means paging through every photo the account has ever held.
-	Since        time.Time
-	FirstSeenAt  time.Time
-	LastSeenAt   time.Time
-	LastSyncedAt time.Time
+	Since time.Time
+	// NewOnly, WeeklyFullWalk and WalkedInFullAt are the library row's alone as well: whether a
+	// nightly walk stops at the first page it already holds, whether it still walks the whole
+	// timeline once a week, and when it last did.
+	NewOnly        bool
+	WeeklyFullWalk bool
+	WalkedInFullAt time.Time
+	FirstSeenAt    time.Time
+	LastSeenAt     time.Time
+	LastSyncedAt   time.Time
 }
 
 // UpsertAlbum records an album seen in a listing. It writes what Google said and nothing the
@@ -133,22 +139,56 @@ func (s *Store) SetAlbumFavourite(albumID string, favourite bool) error {
 	return requireOneRow(result, "album", albumID)
 }
 
-// SetLibrary records both halves of the library's instruction at once, because they are one
-// decision: "back up everything" and "back up everything since 2020" are answers to the same
-// question, and applying one without the other would start a walk of the whole account.
+// LibraryInstruction is everything the user decides about the library, saved as one because it
+// is one decision: "back up everything" and "back up everything since 2020" are answers to the
+// same question, and applying one without the other would start a walk of the whole account.
 //
-// A zero since clears the bound, which means the entire history.
-func (s *Store) SetLibrary(mode SyncMode, since time.Time) error {
-	if !mode.valid() {
-		return fmt.Errorf("unknown sync mode %q", mode)
+// A zero Since clears the bound, which means the entire history. NewOnly stops a nightly walk at
+// the first page the library already holds, and WeeklyFullWalk still walks all of it once a week.
+type LibraryInstruction struct {
+	Mode           SyncMode
+	Since          time.Time
+	NewOnly        bool
+	WeeklyFullWalk bool
+}
+
+// LibraryInstruction reads the instruction back off the library's row, so that a caller changing
+// one part of it saves the rest as it was.
+func (album Album) LibraryInstruction() LibraryInstruction {
+	return LibraryInstruction{
+		Mode:           album.SyncMode,
+		Since:          album.Since,
+		NewOnly:        album.NewOnly,
+		WeeklyFullWalk: album.WeeklyFullWalk,
+	}
+}
+
+// SetLibrary saves the instruction. Moving the date or following the library again forgets the
+// last whole walk, because the photos that asks for lie below where a walk looking only for what
+// is new would stop: the next walk has to be a whole one, weekly walk or not. SQLite reads the
+// row as it was for every expression in SET, so the comparison sees the old date and mode.
+func (s *Store) SetLibrary(instruction LibraryInstruction) error {
+	if !instruction.Mode.valid() {
+		return fmt.Errorf("unknown sync mode %q", instruction.Mode)
 	}
 
-	result, err := s.db.Exec(`UPDATE albums SET sync_mode = ?, since_date = ? WHERE id = ?`,
-		string(mode), nullableTime(since), LibraryID)
+	mode, since := string(instruction.Mode), nullableTime(instruction.Since)
+	result, err := s.db.Exec(`
+		UPDATE albums SET sync_mode = ?, since_date = ?, new_only = ?, weekly_full_walk = ?,
+			walked_in_full_at = CASE WHEN sync_mode = ? AND since_date IS ? THEN walked_in_full_at END
+		WHERE id = ?`,
+		mode, since, instruction.NewOnly, instruction.WeeklyFullWalk, mode, since, LibraryID)
 	if err != nil {
 		return fmt.Errorf("setting the library instruction: %w", err)
 	}
 	return requireOneRow(result, "album", LibraryID)
+}
+
+// MarkLibraryWalkedInFull records a library walk that was not stopped by NewOnly. One that
+// stopped at the date bound counts: below the bound is not part of the backup.
+func (s *Store) MarkLibraryWalkedInFull(at time.Time) error {
+	_, err := s.db.Exec(`UPDATE albums SET walked_in_full_at = ? WHERE id = ?`, formatTime(at), LibraryID)
+	return err
 }
 
 func (s *Store) Library() (Album, error) {
@@ -282,7 +322,7 @@ const albumStatsCounts = `COUNT(*),
 		COALESCE(SUM(CASE WHEN mi.state IN ('discovered', 'queued', 'downloading') THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN mi.state = 'failed' THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN mi.state = 'missing_upstream' THEN 1 ELSE 0 END), 0),
-		COALESCE(SUM(CASE WHEN mi.needs_review = 1 THEN 1 ELSE 0 END), 0),
+		COALESCE(SUM(CASE WHEN ` + flaggedWithAQuestion + ` THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN ms.selected = 1 THEN 1 ELSE 0 END), 0)`
 
 const albumStatsSource = `FROM album_items ai
@@ -329,6 +369,7 @@ func (s *Store) AlbumStatsByID() (map[string]AlbumStats, error) {
 // one edit rather than four that have to agree.
 const albumColumns = `id, title, item_count, sync_mode, created_at, kind,
 	cover_url, owner_name, owner_is_account, is_favourite, since_date,
+	new_only, weekly_full_walk, walked_in_full_at,
 	first_seen_at, last_seen_at, last_synced_at`
 
 func (s *Store) queryAlbums(query string, args ...any) ([]Album, error) {
@@ -342,15 +383,17 @@ func (s *Store) queryAlbums(query string, args ...any) ([]Album, error) {
 	for rows.Next() {
 		var album Album
 		var itemCount sql.NullInt64
-		var created, since, firstSeen, lastSeen, lastSynced sql.NullString
+		var created, since, walkedInFull, firstSeen, lastSeen, lastSynced sql.NullString
 		if err := rows.Scan(&album.ID, &album.Title, &itemCount, &album.SyncMode,
 			&created, &album.Kind, &album.CoverURL, &album.OwnerName, &album.OwnerIsAccount,
-			&album.Favourite, &since, &firstSeen, &lastSeen, &lastSynced); err != nil {
+			&album.Favourite, &since, &album.NewOnly, &album.WeeklyFullWalk, &walkedInFull,
+			&firstSeen, &lastSeen, &lastSynced); err != nil {
 			return nil, fmt.Errorf("scanning an album: %w", err)
 		}
 		album.ItemCount = int(itemCount.Int64)
 		album.CreatedAt = parseTime(created)
 		album.Since = parseTime(since)
+		album.WalkedInFullAt = parseTime(walkedInFull)
 		album.FirstSeenAt = parseTime(firstSeen)
 		album.LastSeenAt = parseTime(lastSeen)
 		album.LastSyncedAt = parseTime(lastSynced)

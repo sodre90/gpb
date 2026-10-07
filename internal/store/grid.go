@@ -3,7 +3,6 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 )
 
 // AlbumPage is one screen of an album, oldest capture first so paging through matches the
@@ -207,16 +206,9 @@ func (s *Store) MediaKeysIn(albumID string, mediaKeys []string) ([]string, error
 		return nil, nil
 	}
 
-	arguments := make([]any, 0, len(mediaKeys)+1)
-	arguments = append(arguments, albumID)
-	for _, key := range mediaKeys {
-		arguments = append(arguments, key)
-	}
-
-	query := `SELECT media_key FROM album_items WHERE album_id = ? AND media_key IN (?` +
-		strings.Repeat(", ?", len(mediaKeys)-1) + `)`
-
-	rows, err := s.db.Query(query, arguments...)
+	names, keys := keyList(mediaKeys)
+	rows, err := s.db.Query(`SELECT media_key FROM album_items WHERE album_id = ? AND media_key IN (`+names+`)`,
+		append([]any{albumID}, keys...)...)
 	if err != nil {
 		return nil, fmt.Errorf("checking album membership: %w", err)
 	}

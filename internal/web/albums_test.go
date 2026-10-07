@@ -419,6 +419,56 @@ func TestTheLibraryCanBeFollowedWithADate(t *testing.T) {
 	}
 }
 
+// The two walk settings travel with the rest of the form. An unticked box is simply absent from a
+// form post, so absence has to save as off — and the notice has to say what a night will now do,
+// because turning the weekly walk off is the one choice here that stops something happening.
+func TestTheLibraryFormSavesHowTheWalkLooksForNewPhotos(t *testing.T) {
+	server, _ := testServer(t)
+	handler := server.Handler()
+	cookie := login(t, handler)
+
+	for name, test := range map[string]struct {
+		form       url.Values
+		newOnly    bool
+		weekly     bool
+		wantNotice string
+	}{
+		"new only, walked whole weekly": {
+			url.Values{"mode": {"all"}, "new_only": {"1"}, "weekly_full_walk": {"1"}}, true, true,
+			"once a week it walks the whole library",
+		},
+		"new only, never walked whole": {
+			url.Values{"mode": {"all"}, "new_only": {"1"}}, true, false,
+			"it will not walk the whole library again until that is unticked or the date is moved",
+		},
+		"walked whole every night": {url.Values{"mode": {"all"}}, false, false, "as far back as it goes."},
+	} {
+		t.Run(name, func(t *testing.T) {
+			recorder := postForm(handler, "/library", test.form, cookie)
+			if recorder.Code != http.StatusSeeOther {
+				t.Fatalf("saving the library returned %d, want 303", recorder.Code)
+			}
+
+			library, err := server.store.Library()
+			if err != nil {
+				t.Fatalf("reading the library back: %v", err)
+			}
+			if library.NewOnly != test.newOnly || library.WeeklyFullWalk != test.weekly {
+				t.Errorf("the library saved new only %t, weekly %t; want %t, %t",
+					library.NewOnly, library.WeeklyFullWalk, test.newOnly, test.weekly)
+			}
+			if notice := libraryNotice(library.LibraryInstruction()); !strings.Contains(notice, test.wantNotice) {
+				t.Errorf("the notice reads %q, want it to say %q", notice, test.wantNotice)
+			}
+
+			body := get(handler, "/albums", cookie).Body.String()
+			if checked := strings.Contains(body, `name="new_only" value="1" checked`); checked != test.newOnly {
+				t.Errorf("the page shows the new-only box checked: %t, want %t", checked, test.newOnly)
+			}
+		})
+	}
+}
+
 // The date is the difference between a few hundred photos and a hundred thousand. A date the
 // server cannot read must not be silently dropped into "no bound at all".
 func TestAnUnreadableLibraryDateChangesNothing(t *testing.T) {

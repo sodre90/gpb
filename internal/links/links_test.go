@@ -58,7 +58,7 @@ func (h *harness) item(albumID, mediaKey, filename string, capturedAt time.Time)
 	if err := h.db.UpsertItem(store.MediaItem{MediaKey: mediaKey, Filename: filename, CapturedAt: capturedAt}, now); err != nil {
 		h.t.Fatalf("seeding item %s: %v", mediaKey, err)
 	}
-	if err := h.db.LinkItemToAlbum(albumID, mediaKey, now); err != nil {
+	if err := h.db.LinkItemToAlbum(albumID, mediaKey); err != nil {
 		h.t.Fatalf("linking %s to %s: %v", mediaKey, albumID, err)
 	}
 	if err := h.db.MarkDownloaded(store.MediaItem{

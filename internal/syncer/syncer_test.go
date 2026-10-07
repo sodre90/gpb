@@ -840,7 +840,7 @@ func libraryHarness(t *testing.T, since time.Time) *harness {
 		}
 	}
 
-	if err := h.store.SetLibrary(store.SyncAll, since); err != nil {
+	if err := h.store.SetLibrary(store.LibraryInstruction{Mode: store.SyncAll, Since: since}); err != nil {
 		t.Fatalf("following the library: %v", err)
 	}
 	return h
@@ -957,7 +957,7 @@ func TestAWalkThatStopsAtTheBoundWritesOffNothingBelowIt(t *testing.T) {
 		t.Fatalf("the unbounded run: %v", err)
 	}
 
-	if err := h.store.SetLibrary(store.SyncAll, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+	if err := h.store.SetLibrary(store.LibraryInstruction{Mode: store.SyncAll, Since: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}); err != nil {
 		t.Fatalf("moving the bound: %v", err)
 	}
 	if _, err := h.syncer.Run(t.Context()); err != nil {
@@ -1011,6 +1011,65 @@ func TestAnItemCapturedAtTheBoundSurvivesAWalkThatStoppedThere(t *testing.T) {
 	}
 }
 
+// A walk held to a date vouches only for what lies on or after it, even one that ran to the end of
+// the timeline, and an item whose capture date Google never reported has no known place in an
+// order that is that date — so the walk cannot be shown to have passed over it. Reconciling it
+// would write off a photo for the accident of having no metadata, and the worst-metadata photos
+// are the ones a backup exists for.
+func TestAnUndatedItemSurvivesABoundedWalk(t *testing.T) {
+	h := libraryHarness(t, time.Time{})
+	front := h.source.timeline[0]
+	h.source.timeline[0] = append(front, timelineItem("undated", time.Time{}))
+	h.source.bodies["undated"] = []byte("bytes of undated")
+
+	if _, err := h.syncer.Run(t.Context()); err != nil {
+		t.Fatalf("the unbounded run: %v", err)
+	}
+	if err := h.store.SetLibrary(store.LibraryInstruction{Mode: store.SyncAll, Since: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}); err != nil {
+		t.Fatalf("moving the bound: %v", err)
+	}
+	h.source.timeline[0] = front
+
+	if _, err := h.syncer.Run(t.Context()); err != nil {
+		t.Fatalf("the bounded run: %v", err)
+	}
+
+	item, err := h.store.Item("undated")
+	if err != nil {
+		t.Fatalf("reading the undated item back: %v", err)
+	}
+	if item.State == store.StateMissingUpstream {
+		t.Error("an item Google never dated was written off by a walk held to a date")
+	}
+}
+
+// The rule the walks above exercise end to end, case by case: a walk with no floor vouches for
+// everything, and one with a floor vouches for what was captured on or after it — which an item
+// with no capture date never is.
+func TestWhatAWalkVouchesForIsWhatLiesWithinItsFloor(t *testing.T) {
+	floor := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cases := map[string]struct {
+		captured, vouchedFrom time.Time
+		want                  bool
+	}{
+		"a dated item, no floor":        {captured: floor, want: true},
+		"an undated item, no floor":     {want: true},
+		"an undated item under a floor": {vouchedFrom: floor, want: false},
+		"captured before the floor":     {captured: floor.Add(-time.Nanosecond), vouchedFrom: floor, want: false},
+		"captured at the floor":         {captured: floor, vouchedFrom: floor, want: true},
+		"captured after the floor":      {captured: floor.Add(time.Hour), vouchedFrom: floor, want: true},
+	}
+
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := reconcilable(test.captured, test.vouchedFrom); got != test.want {
+				t.Errorf("an item captured %s under a floor of %s is reconcilable: %t, want %t",
+					test.captured, test.vouchedFrom, got, test.want)
+			}
+		})
+	}
+}
+
 // A timeline that answers with nothing is a failure wearing a success's clothes. Believed, it
 // would write off the user's entire library in one run.
 func TestAnEmptyTimelineWritesOffNothing(t *testing.T) {
@@ -1035,11 +1094,276 @@ func TestAnEmptyTimelineWritesOffNothing(t *testing.T) {
 	}
 }
 
+// newOnlyHarness is a library of three pages, walked whole once and then told to look only for
+// what is new. Three, because a walk that stops on the second page has to be told apart from one
+// that ran out of timeline.
+func newOnlyHarness(t *testing.T, since time.Time, weeklyFullWalk bool) *harness {
+	t.Helper()
+
+	h := newHarness(t, store.SyncNone, map[string]string{})
+	h.source.timeline = [][]gphotos.MediaItem{
+		{timelineItem("august-a", taken(2026, 8, 10)), timelineItem("august-b", taken(2026, 8, 9))},
+		{timelineItem("june", taken(2026, 6, 1)), timelineItem("may", taken(2026, 5, 1))},
+		{timelineItem("archive-a", taken(2025, 1, 1)), timelineItem("archive-b", taken(2024, 1, 1))},
+	}
+	for _, page := range h.source.timeline {
+		for _, item := range page {
+			h.source.bodies[item.MediaKey] = []byte("bytes of " + item.MediaKey)
+		}
+	}
+
+	if err := h.store.SetLibrary(store.LibraryInstruction{Mode: store.SyncAll, Since: since}); err != nil {
+		t.Fatalf("following the library: %v", err)
+	}
+	if _, err := h.syncer.Run(t.Context()); err != nil {
+		t.Fatalf("the first, whole walk: %v", err)
+	}
+	instruction := store.LibraryInstruction{Mode: store.SyncAll, Since: since, NewOnly: true, WeeklyFullWalk: weeklyFullWalk}
+	if err := h.store.SetLibrary(instruction); err != nil {
+		t.Fatalf("asking for new photos only: %v", err)
+	}
+	return h
+}
+
+func taken(year int, month time.Month, day int) time.Time {
+	return time.Date(year, month, day, 12, 0, 0, 0, time.UTC)
+}
+
+// upload puts a photo on the timeline where its capture date sorts it and gives it bytes.
+func (h *harness) upload(item gphotos.MediaItem) {
+	h.source.bodies[item.MediaKey] = []byte("bytes of " + item.MediaKey)
+	for at, page := range h.source.timeline {
+		place := slices.IndexFunc(page, func(listed gphotos.MediaItem) bool { return listed.CapturedAt.Before(item.CapturedAt) })
+		if place >= 0 {
+			h.source.timeline[at] = slices.Insert(page, place, item)
+			return
+		}
+	}
+	last := len(h.source.timeline) - 1
+	h.source.timeline[last] = append(h.source.timeline[last], item)
+}
+
+func (h *harness) deleteFromTimeline(mediaKey string) {
+	for at, page := range h.source.timeline {
+		h.source.timeline[at] = slices.DeleteFunc(page, func(item gphotos.MediaItem) bool { return item.MediaKey == mediaKey })
+	}
+}
+
+// runCountingPages is one night's run and how many timeline pages it asked for.
+func (h *harness) runCountingPages(t *testing.T) (Report, int) {
+	t.Helper()
+
+	before := h.source.timelinePagesServed()
+	report, err := h.syncer.Run(t.Context())
+	if err != nil {
+		t.Fatalf("running the sync: %v", err)
+	}
+	return report, h.source.timelinePagesServed() - before
+}
+
+func (h *harness) state(t *testing.T, mediaKey string) store.State {
+	t.Helper()
+
+	item, err := h.store.Item(mediaKey)
+	if err != nil {
+		return ""
+	}
+	return item.State
+}
+
+// The point of looking only for what is new: a night with nothing new reads one page of the
+// timeline, not all of it. A walk that stopped short is not a whole one, and recording it as one
+// would put the weekly walk off by another week every night.
+func TestANewOnlyWalkStopsAtTheFirstPageItAlreadyHolds(t *testing.T) {
+	h := newOnlyHarness(t, time.Time{}, true)
+	before, err := h.store.Library()
+	if err != nil {
+		t.Fatalf("reading the library: %v", err)
+	}
+
+	if _, pages := h.runCountingPages(t); pages != 1 {
+		t.Errorf("a night with nothing new read %d timeline pages, want 1", pages)
+	}
+	after, err := h.store.Library()
+	if err != nil {
+		t.Fatalf("reading the library: %v", err)
+	}
+	if !after.WalkedInFullAt.Equal(before.WalkedInFullAt) {
+		t.Errorf("a walk that stopped at the first page moved the last whole walk from %s to %s",
+			before.WalkedInFullAt, after.WalkedInFullAt)
+	}
+}
+
+// A new photo is found the night it appears, and the walk goes on only as far as the first page
+// with nothing new on it.
+func TestANewOnlyWalkFindsANewPhotoTheSameNight(t *testing.T) {
+	h := newOnlyHarness(t, time.Time{}, true)
+	h.upload(timelineItem("taken-today", taken(2026, 8, 11)))
+
+	report, pages := h.runCountingPages(t)
+	if report.Downloaded != 1 || h.state(t, "taken-today") != store.StateDone {
+		t.Errorf("the new photo came out %q after a run that downloaded %d", h.state(t, "taken-today"), report.Downloaded)
+	}
+	if pages != 2 {
+		t.Errorf("the walk read %d timeline pages, want the one with the new photo and the next", pages)
+	}
+}
+
+// What stopping early costs: a photo uploaded with an old capture date sorts below where a
+// nightly walk stops, so it waits for the weekly walk — which does find it, and is recorded as a
+// whole walk so the next one is a week away again.
+func TestAPhotoUploadedWithAnOldDateWaitsForTheWeeklyWalk(t *testing.T) {
+	h := newOnlyHarness(t, time.Time{}, true)
+	h.upload(timelineItem("scanned", taken(2024, 6, 1)))
+
+	h.runCountingPages(t)
+	if state := h.state(t, "scanned"); state != "" {
+		t.Fatalf("a nightly walk reached a photo below where it stops, and recorded it as %q", state)
+	}
+
+	weekAgo := time.Now().Add(-7 * 24 * time.Hour)
+	if err := h.store.MarkLibraryWalkedInFull(weekAgo); err != nil {
+		t.Fatalf("dating the last whole walk a week back: %v", err)
+	}
+	_, pages := h.runCountingPages(t)
+	if pages != 3 || h.state(t, "scanned") != store.StateDone {
+		t.Errorf("the weekly walk read %d pages and left the old-dated upload %q; want all 3 and done",
+			pages, h.state(t, "scanned"))
+	}
+	library, err := h.store.Library()
+	if err != nil {
+		t.Fatalf("reading the library: %v", err)
+	}
+	if !library.WalkedInFullAt.After(weekAgo) {
+		t.Errorf("the weekly walk was not recorded; the last whole walk still reads %s", library.WalkedInFullAt)
+	}
+}
+
+// A walk vouches for what it went past and for nothing below it. A photo deleted from the stretch
+// it read is written off the same night; one deleted from further back waits for the weekly walk,
+// because a nightly walk that stopped short has not seen it gone, only not seen it.
+func TestANewOnlyWalkWritesOffOnlyWhatItWentPast(t *testing.T) {
+	h := newOnlyHarness(t, time.Time{}, true)
+	h.upload(timelineItem("taken-today", taken(2026, 8, 11)))
+	h.deleteFromTimeline("august-b")
+	h.deleteFromTimeline("archive-a")
+
+	h.runCountingPages(t)
+	if state := h.state(t, "august-b"); state != store.StateMissingUpstream {
+		t.Errorf("a photo deleted from the stretch the walk read is %q, want it written off", state)
+	}
+	if state := h.state(t, "archive-a"); state != store.StateDone {
+		t.Fatalf("a photo below where the walk stopped is %q; the walk never looked there", state)
+	}
+
+	if err := h.store.MarkLibraryWalkedInFull(time.Now().Add(-7 * 24 * time.Hour)); err != nil {
+		t.Fatalf("dating the last whole walk a week back: %v", err)
+	}
+	h.runCountingPages(t)
+	if state := h.state(t, "archive-a"); state != store.StateMissingUpstream {
+		t.Errorf("the weekly walk left a photo deleted from further back %q, want it written off", state)
+	}
+}
+
+// Turning the weekly walk off is a real choice and is kept: however long it has been, the walk
+// still stops at what it holds.
+func TestWithoutTheWeeklyWalkTheLibraryIsNotWalkedWholeAgain(t *testing.T) {
+	h := newOnlyHarness(t, time.Time{}, false)
+	if err := h.store.MarkLibraryWalkedInFull(time.Now().Add(-30 * 24 * time.Hour)); err != nil {
+		t.Fatalf("dating the last whole walk a month back: %v", err)
+	}
+
+	if _, pages := h.runCountingPages(t); pages != 1 {
+		t.Errorf("with the weekly walk off, a month on, the walk read %d pages, want 1", pages)
+	}
+}
+
+// Moving the date back asks for photos the backup has never had, and they lie below where a walk
+// looking only for what is new stops. So the next walk is a whole one even with the weekly walk
+// off, and the one after that is back to a page.
+func TestMovingTheDateBackWalksTheWholeLibraryOnce(t *testing.T) {
+	h := newOnlyHarness(t, taken(2026, 1, 1), false)
+	if state := h.state(t, "archive-a"); state != "" {
+		t.Fatalf("a photo below the first date was recorded as %q before the date moved", state)
+	}
+
+	if err := h.store.SetLibrary(store.LibraryInstruction{Mode: store.SyncAll, NewOnly: true}); err != nil {
+		t.Fatalf("moving the date back: %v", err)
+	}
+	_, pages := h.runCountingPages(t)
+	if pages != 3 || h.state(t, "archive-a") != store.StateDone {
+		t.Errorf("after the date moved back the walk read %d pages and left the older photo %q; want 3 and done",
+			pages, h.state(t, "archive-a"))
+	}
+	if _, pages := h.runCountingPages(t); pages != 1 {
+		t.Errorf("the night after the whole walk read %d pages, want 1", pages)
+	}
+}
+
+func TestWhetherTonightsWalkMayStopEarly(t *testing.T) {
+	now := time.Date(2026, 10, 7, 3, 40, 0, 0, time.UTC)
+	cases := map[string]struct {
+		library store.Album
+		want    bool
+	}{
+		"not asked to":               {store.Album{WeeklyFullWalk: true, WalkedInFullAt: now.Add(-time.Hour)}, false},
+		"asked, with no weekly walk": {store.Album{NewOnly: true, WalkedInFullAt: now.Add(-30 * 24 * time.Hour)}, true},
+		// A date or mode change forgets the last whole walk, and the walk that is then owed is
+		// owed even to a library whose weekly walk is off.
+		"asked, no weekly walk, never walked whole": {store.Album{NewOnly: true}, false},
+		"asked, never walked whole":                 {store.Album{NewOnly: true, WeeklyFullWalk: true}, false},
+		"asked, walked whole two days ago":          {store.Album{NewOnly: true, WeeklyFullWalk: true, WalkedInFullAt: now.Add(-48 * time.Hour)}, true},
+		// The library walk starts at a different minute each night, so a week minus a few minutes
+		// is a week: insisting on the full seven days would slip the walk to the eighth night.
+		"asked, a week ago less a few minutes": {
+			store.Album{NewOnly: true, WeeklyFullWalk: true, WalkedInFullAt: now.Add(-7*24*time.Hour + 9*time.Minute)}, false,
+		},
+	}
+
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := walksNewOnly(test.library, now); got != test.want {
+				t.Errorf("walksNewOnly is %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+// Ground to stop on is a page held in full that can say where it is in the timeline.
+func TestKnownGroundIsAWholePageAlreadyHeldWithADateOnIt(t *testing.T) {
+	members := map[string]time.Time{"a": taken(2026, 8, 10), "b": taken(2026, 8, 9), "undated": {}}
+	cases := map[string]struct {
+		page     []gphotos.MediaItem
+		wantHeld bool
+		wantFrom time.Time
+	}{
+		"every item held": {
+			page: []gphotos.MediaItem{timelineItem("a", taken(2026, 8, 10)), timelineItem("b", taken(2026, 8, 9))}, wantHeld: true, wantFrom: taken(2026, 8, 9),
+		},
+		"one item new": {
+			page: []gphotos.MediaItem{timelineItem("a", taken(2026, 8, 10)), timelineItem("new", taken(2026, 8, 9))},
+		},
+		"held but undated": {
+			page: []gphotos.MediaItem{timelineItem("undated", time.Time{})},
+		},
+		"an empty page": {},
+	}
+
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			from, held := knownGround(test.page, members)
+			if held != test.wantHeld || !from.Equal(test.wantFrom) {
+				t.Errorf("knownGround is %s, %t; want %s, %t", from, held, test.wantFrom, test.wantHeld)
+			}
+		})
+	}
+}
+
 // An unfollowed library must stay untouched: a fresh install downloads nothing until asked,
 // and the library is the one row where "everything" means a hundred thousand items.
 func TestAnUnfollowedLibraryIsNeverWalked(t *testing.T) {
 	h := libraryHarness(t, time.Time{})
-	if err := h.store.SetLibrary(store.SyncNone, time.Time{}); err != nil {
+	if err := h.store.SetLibrary(store.LibraryInstruction{Mode: store.SyncNone}); err != nil {
 		t.Fatalf("unfollowing the library: %v", err)
 	}
 
@@ -1252,7 +1576,7 @@ func seedBacklog(t *testing.T, h *harness, keys ...string) {
 		if err := h.store.UpsertItem(store.MediaItem{MediaKey: key, Filename: key}, listedAt); err != nil {
 			t.Fatalf("seeding the backlog item %s: %v", key, err)
 		}
-		if err := h.store.LinkItemToAlbum("album-1", key, listedAt); err != nil {
+		if err := h.store.LinkItemToAlbum("album-1", key); err != nil {
 			t.Fatalf("linking the backlog item %s: %v", key, err)
 		}
 	}
@@ -1360,11 +1684,11 @@ func TestAnAlbumGoogleNoLongerListsKeepsItsContents(t *testing.T) {
 		t.Fatalf("the second run: %v", err)
 	}
 
-	members, err := h.store.MembersOf("album-1")
+	members, err := h.store.AlbumMembers("album-1")
 	if err != nil {
 		t.Fatalf("reading the album: %v", err)
 	}
-	if !members["key-1"] {
+	if _, still := members["key-1"]; !still {
 		t.Error("an album Google stopped listing lost the items it held")
 	}
 }
@@ -1463,7 +1787,7 @@ func TestDeletingTheOnlyFollowedAlbumDoesNotStopTheLibraryWalk(t *testing.T) {
 		Width:      100, Height: 100,
 	}}}
 	h.source.bodies["key-loose"] = []byte("loose")
-	if err := h.store.SetLibrary(store.SyncAll, time.Time{}); err != nil {
+	if err := h.store.SetLibrary(store.LibraryInstruction{Mode: store.SyncAll}); err != nil {
 		t.Fatalf("following the library: %v", err)
 	}
 	stopListing(h, "album-1")
@@ -1542,11 +1866,11 @@ func TestASkippedAlbumKeepsEverythingItAlreadyHeld(t *testing.T) {
 		t.Fatalf("the second run: %v", err)
 	}
 
-	members, err := h.store.MembersOf("album-1")
+	members, err := h.store.AlbumMembers("album-1")
 	if err != nil {
 		t.Fatalf("reading the skipped album: %v", err)
 	}
-	if !members["key-1"] {
+	if _, still := members["key-1"]; !still {
 		t.Error("a skipped album lost the item it already held")
 	}
 }
@@ -1708,12 +2032,14 @@ func TestAnAlbumThatListsNothingGoogleSaysIsFullStopsTheRun(t *testing.T) {
 		t.Errorf("the run finished %q, want drift", report.Outcome)
 	}
 
-	members, err := h.store.MembersOf("album-1")
+	members, err := h.store.AlbumMembers("album-1")
 	if err != nil {
 		t.Fatalf("reading the album: %v", err)
 	}
-	if !members["key-1"] || !members["key-2"] {
-		t.Errorf("the album was emptied on a listing that returned nothing: %v", members)
+	for _, key := range []string{"key-1", "key-2"} {
+		if _, still := members[key]; !still {
+			t.Errorf("%s was written off an album a listing said nothing about: %v", key, members)
+		}
 	}
 }
 

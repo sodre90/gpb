@@ -73,7 +73,6 @@ func seedPreview(t *testing.T, server *Server) {
 			Filename:  fmt.Sprintf("IMG_%04d.jpg", index),
 			LocalPath: path,
 			SizeBytes: size,
-			MimeType:  "image/jpeg",
 		}
 		if err := server.store.MarkDownloaded(downloaded, now); err != nil {
 			t.Fatalf("marking %s downloaded: %v", key, err)

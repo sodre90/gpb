@@ -91,13 +91,16 @@ type libraryCard struct {
 	Mode store.SyncMode
 	// Since is a yyyy-mm-dd string because that is what an <input type="date"> reads and writes.
 	// Empty means no bound, which means every photo the account has ever held.
-	Since      string
-	Known      int
-	Done       int
-	Pending    int
-	Failed     int
-	LastSynced string
-	Query      string
+	Since          string
+	NewOnly        bool
+	WeeklyFullWalk bool
+	Known          int
+	Done           int
+	Pending        int
+	Failed         int
+	LastSynced     string
+	WalkedInFull   string
+	Query          string
 }
 
 func (l libraryCard) Following() bool { return l.Mode != store.SyncNone }
@@ -448,13 +451,16 @@ func rowFor(album store.Album, stats store.AlbumStats, query string) albumRow {
 
 func libraryCardFor(album store.Album, stats store.AlbumStats, query string) libraryCard {
 	card := libraryCard{
-		Mode:       album.SyncMode,
-		Known:      stats.Known,
-		Done:       stats.Done,
-		Pending:    stats.Pending,
-		Failed:     stats.Failed,
-		LastSynced: humanTime(album.LastSyncedAt),
-		Query:      query,
+		Mode:           album.SyncMode,
+		NewOnly:        album.NewOnly,
+		WeeklyFullWalk: album.WeeklyFullWalk,
+		Known:          stats.Known,
+		Done:           stats.Done,
+		Pending:        stats.Pending,
+		Failed:         stats.Failed,
+		LastSynced:     humanTime(album.LastSyncedAt),
+		WalkedInFull:   humanTime(album.WalkedInFullAt),
+		Query:          query,
 	}
 	if !album.Since.IsZero() {
 		card.Since = album.Since.Format(sinceLayout)
@@ -476,13 +482,18 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mode := store.SyncMode(r.FormValue("mode"))
-	if err := s.store.SetLibrary(mode, since); err != nil {
+	instruction := store.LibraryInstruction{
+		Mode:           store.SyncMode(r.FormValue("mode")),
+		Since:          since,
+		NewOnly:        r.FormValue("new_only") != "",
+		WeeklyFullWalk: r.FormValue("weekly_full_walk") != "",
+	}
+	if err := s.store.SetLibrary(instruction); err != nil {
 		log.Printf("web: setting the library instruction: %v", err)
 		s.renderAlbums(w, r, http.StatusBadRequest, "The library could not be updated.")
 		return
 	}
-	redirectWithNotice(w, r, libraryNotice(mode, since))
+	redirectWithNotice(w, r, libraryNotice(instruction))
 }
 
 func parseSince(value string) (time.Time, error) {
@@ -495,12 +506,28 @@ func parseSince(value string) (time.Time, error) {
 // libraryNotice says back what was actually saved. The date is the difference between a few
 // hundred photos and a hundred thousand, so leaving it out of the confirmation would hide the
 // one number that matters.
-func libraryNotice(mode store.SyncMode, since time.Time) string {
-	if mode == store.SyncNone {
+func libraryNotice(instruction store.LibraryInstruction) string {
+	if instruction.Mode == store.SyncNone {
 		return "The library will no longer be backed up."
 	}
-	if since.IsZero() {
-		return "The whole library will be backed up, as far back as it goes."
+	if instruction.Since.IsZero() {
+		return "The whole library will be backed up, as far back as it goes." + walkNotice(instruction)
 	}
-	return "The library will be backed up from " + since.Format(sinceLayout) + " onwards."
+	return "The library will be backed up from " + instruction.Since.Format(sinceLayout) + " onwards." +
+		walkNotice(instruction)
+}
+
+// walkNotice says what a night's walk will do, because turning the weekly walk off is the one
+// choice here that stops something happening: nothing will notice a deletion below where the
+// nightly walk stops until the setting is changed back.
+func walkNotice(instruction store.LibraryInstruction) string {
+	switch {
+	case !instruction.NewOnly:
+		return ""
+	case instruction.WeeklyFullWalk:
+		return " Each night it looks only for what is new, and once a week it walks the whole library."
+	default:
+		return " Each night it looks only for what is new, and it will not walk the whole library again" +
+			" until that is unticked or the date is moved."
+	}
 }

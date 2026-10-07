@@ -1,8 +1,10 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -37,7 +39,7 @@ func seedFollowedAlbum(t *testing.T, store *Store, mode SyncMode, keys ...string
 		if err := store.UpsertItem(MediaItem{MediaKey: key, Filename: key + ".jpg", CapturedAt: noon}, noon); err != nil {
 			t.Fatalf("seeding an item: %v", err)
 		}
-		if err := store.LinkItemToAlbum(albumID, key, noon); err != nil {
+		if err := store.LinkItemToAlbum(albumID, key); err != nil {
 			t.Fatalf("linking an item: %v", err)
 		}
 	}
@@ -104,7 +106,7 @@ func TestRelistingAnItemKeepsItsDownloadState(t *testing.T) {
 	seedFollowedAlbum(t, store, SyncAll, "item-1")
 
 	done := MediaItem{MediaKey: "item-1", Filename: "IMG_1.jpg", LocalPath: "/pool/IMG_1.jpg",
-		SizeBytes: 4096, SHA256: "abc", MimeType: "image/jpeg"}
+		SizeBytes: 4096, SHA256: "abc"}
 	if err := store.MarkDownloaded(done, noon); err != nil {
 		t.Fatalf("marking downloaded: %v", err)
 	}
@@ -162,7 +164,7 @@ func TestPendingOffersOnlyFollowedWork(t *testing.T) {
 	if err := store.UpsertItem(MediaItem{MediaKey: "item-3", Filename: "c.jpg"}, noon); err != nil {
 		t.Fatalf("seeding: %v", err)
 	}
-	if err := store.LinkItemToAlbum("album-2", "item-3", noon); err != nil {
+	if err := store.LinkItemToAlbum("album-2", "item-3"); err != nil {
 		t.Fatalf("linking: %v", err)
 	}
 
@@ -267,10 +269,10 @@ func TestAWrittenOffCopyOfAPhotoStillThereIsNotPutUpForReview(t *testing.T) {
 	}
 
 	later := noon.Add(24 * time.Hour)
-	if err := store.LinkItemToAlbum(albumID, "kept", later); err != nil {
+	if err := store.LinkItemToAlbum(albumID, "kept"); err != nil {
 		t.Fatalf("re-listing the surviving item: %v", err)
 	}
-	departed, err := store.ReconcileAlbum(albumID, later)
+	departed, err := store.Reconcile(albumID, []string{"identical", "re-encoded", "better-than-kept", "never-fetched"}, later)
 	if err != nil {
 		t.Fatalf("reconciling the album: %v", err)
 	}
@@ -294,11 +296,11 @@ func TestVanishedItemsAreFoundAndNeverDeleted(t *testing.T) {
 	albumID := seedFollowedAlbum(t, store, SyncAll, "item-1", "item-2")
 
 	later := noon.Add(24 * time.Hour)
-	if err := store.LinkItemToAlbum(albumID, "item-1", later); err != nil {
+	if err := store.LinkItemToAlbum(albumID, "item-1"); err != nil {
 		t.Fatalf("re-listing the surviving item: %v", err)
 	}
 
-	departed, err := store.ReconcileAlbum(albumID, later)
+	departed, err := store.Reconcile(albumID, []string{"item-2"}, later)
 	if err != nil {
 		t.Fatalf("reconciling the album: %v", err)
 	}
@@ -329,10 +331,10 @@ func TestVanishedItemsAreFoundAndNeverDeleted(t *testing.T) {
 	// left is gone rather than merely stale, so the same absence cannot be rediscovered and
 	// re-dated every night.
 	tomorrow := later.Add(24 * time.Hour)
-	if err := store.LinkItemToAlbum(albumID, "item-1", tomorrow); err != nil {
+	if err := store.LinkItemToAlbum(albumID, "item-1"); err != nil {
 		t.Fatalf("re-listing the surviving item: %v", err)
 	}
-	again, err := store.ReconcileAlbum(albumID, tomorrow)
+	again, err := store.Reconcile(albumID, []string{"item-2"}, tomorrow)
 	if err != nil {
 		t.Fatalf("reconciling a second time: %v", err)
 	}
@@ -358,7 +360,7 @@ func TestThePillCountsOnlyWhatTheReviewPageLists(t *testing.T) {
 	if err := store.UpsertItem(MediaItem{MediaKey: "unfollowed", Filename: "unfollowed.jpg"}, noon); err != nil {
 		t.Fatalf("seeding an item nobody follows: %v", err)
 	}
-	if err := store.LinkItemToAlbum("declined", "unfollowed", noon); err != nil {
+	if err := store.LinkItemToAlbum("declined", "unfollowed"); err != nil {
 		t.Fatalf("linking an item nobody follows: %v", err)
 	}
 	if err := store.MarkDownloaded(MediaItem{MediaKey: "downloaded", Filename: "downloaded.jpg",
@@ -408,16 +410,16 @@ func TestLeavingOneAlbumIsNotVanishingFromGoogle(t *testing.T) {
 	if err := store.UpsertAlbum(Album{ID: otherAlbum, Title: "Elsewhere"}, noon); err != nil {
 		t.Fatalf("seeding the second album: %v", err)
 	}
-	if err := store.LinkItemToAlbum(otherAlbum, "item-2", noon); err != nil {
+	if err := store.LinkItemToAlbum(otherAlbum, "item-2"); err != nil {
 		t.Fatalf("linking the item to the second album: %v", err)
 	}
 
 	later := noon.Add(24 * time.Hour)
-	if err := store.LinkItemToAlbum(albumID, "item-1", later); err != nil {
+	if err := store.LinkItemToAlbum(albumID, "item-1"); err != nil {
 		t.Fatalf("re-listing the surviving item: %v", err)
 	}
 
-	departed, err := store.ReconcileAlbum(albumID, later)
+	departed, err := store.Reconcile(albumID, []string{"item-2"}, later)
 	if err != nil {
 		t.Fatalf("reconciling the album: %v", err)
 	}
@@ -433,14 +435,18 @@ func TestLeavingOneAlbumIsNotVanishingFromGoogle(t *testing.T) {
 		t.Errorf("an item still in another album is %q, review=%v", item.State, item.NeedsReview)
 	}
 
-	members, err := store.MembersOf(albumID)
+	members, err := store.AlbumMembers(albumID)
 	if err != nil {
 		t.Fatalf("reading the membership: %v", err)
 	}
-	if members["item-2"] {
+	if _, still := members["item-2"]; still {
 		t.Error("the item is still a member of the album it left")
 	}
 }
+
+// relistedUnchanged is item-1 described exactly as seedFollowedAlbum stored it, so a re-listing of
+// it changes nothing Google reports and only the item's own state can let the update through.
+var relistedUnchanged = MediaItem{MediaKey: "item-1", Filename: "item-1.jpg", CapturedAt: noon}
 
 // An item that comes back has not vanished, and must not keep telling the review queue it has.
 func TestAReappearingItemStopsBeingMissing(t *testing.T) {
@@ -450,7 +456,7 @@ func TestAReappearingItemStopsBeingMissing(t *testing.T) {
 	if err := store.MarkMissingUpstream("item-1", noon); err != nil {
 		t.Fatalf("marking missing: %v", err)
 	}
-	if err := store.UpsertItem(MediaItem{MediaKey: "item-1", Filename: "a.jpg"}, noon.Add(time.Hour)); err != nil {
+	if err := store.UpsertItem(relistedUnchanged, noon.Add(time.Hour)); err != nil {
 		t.Fatalf("re-listing: %v", err)
 	}
 
@@ -477,7 +483,7 @@ func TestAReappearingItemIsOfferedForWorkAgain(t *testing.T) {
 		if err := store.MarkMissingUpstream("item-1", noon); err != nil {
 			t.Fatalf("marking missing: %v", err)
 		}
-		if err := store.UpsertItem(MediaItem{MediaKey: "item-1"}, noon.Add(time.Hour)); err != nil {
+		if err := store.UpsertItem(relistedUnchanged, noon.Add(time.Hour)); err != nil {
 			t.Fatalf("re-listing: %v", err)
 		}
 
@@ -511,25 +517,103 @@ func TestAReappearingItemIsOfferedForWorkAgain(t *testing.T) {
 	})
 }
 
-// SQL compares stored timestamps as strings, so a format whose fractional part varies in
-// width would order them wrongly and hide vanished items. This is the sub-second case that
-// time.RFC3339Nano gets wrong.
-func TestStoredTimestampsSortChronologically(t *testing.T) {
+// Up to 0.4.2 a download that finished while the same run wrote its item off left the item done
+// with a missing_since still on it, and Reconcile reads any missing_since as "already written
+// off". The download path no longer leaves that behind, but databases still hold the rows it did,
+// so the row is written here as that release wrote it. A re-listing has to clear the date even
+// though nothing Google reports has changed, or the photo's real disappearance later takes it out
+// of its album without ever reaching the review queue.
+func TestARelistingClearsAMissingDateAnOlderReleaseLeftBehind(t *testing.T) {
 	store := openTestStore(t)
-	albumID := seedFollowedAlbum(t, store, SyncAll, "item-1", "item-2")
+	albumID := seedFollowedAlbum(t, store, SyncAll, "item-1")
 
-	listedAt := noon.Add(500 * time.Millisecond)
-	if err := store.LinkItemToAlbum(albumID, "item-1", listedAt); err != nil {
-		t.Fatalf("re-listing the surviving item: %v", err)
+	if _, err := store.db.Exec(`
+		UPDATE media_items SET state = ?, local_path = '2026/08/item-1.jpg', missing_since = ?, needs_review = 1
+		WHERE media_key = 'item-1'`, string(StateDone), formatTime(noon)); err != nil {
+		t.Fatalf("writing the row 0.4.2 left: %v", err)
+	}
+	if err := store.UpsertItem(relistedUnchanged, noon.Add(time.Hour)); err != nil {
+		t.Fatalf("re-listing: %v", err)
 	}
 
-	departed, err := store.ReconcileAlbum(albumID, listedAt)
+	departed, err := store.Reconcile(albumID, []string{"item-1"}, noon.Add(48*time.Hour))
 	if err != nil {
-		t.Fatalf("reconciling the album: %v", err)
+		t.Fatalf("reconciling the photo's real disappearance: %v", err)
 	}
-	if departed.LeftTheAlbum != 1 {
-		t.Fatalf("%d items left the album, want 1 — timestamps are not sorting",
-			departed.LeftTheAlbum)
+	if departed.GoneFromGoogle != 1 {
+		t.Errorf("a downloaded photo that later left Google reconciled as %+v, want it written off", departed)
+	}
+}
+
+// Listing and downloading run side by side, so a walk can write an item off while a worker holds
+// it. Whatever the worker then reports is older news than the write-off, and must not undo it:
+// the item stays missing, keeps the date it was noticed gone, and a second walk over the same
+// absence finds nothing left to do. A file that did arrive is still recorded.
+func TestTheDownloadPathLeavesAWriteOffStanding(t *testing.T) {
+	landed := MediaItem{MediaKey: "item-1", Filename: "IMG_0001.jpg", LocalPath: "2026/08/item-1.jpg", SizeBytes: 12}
+	for name, test := range map[string]struct {
+		report   func(*Store) error
+		wantPath string
+	}{
+		"a download that finished": {func(store *Store) error { return store.MarkDownloaded(landed, noon) }, landed.LocalPath},
+		"a download that failed": {func(store *Store) error {
+			return store.MarkFailed("item-1", errors.New("the content host timed out"))
+		}, ""},
+		"a worker taking the item": {func(store *Store) error { return store.SetItemState("item-1", StateDownloading) }, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := openTestStore(t)
+			albumID := seedFollowedAlbum(t, store, SyncAll, "item-1")
+			if _, err := store.Reconcile(albumID, []string{"item-1"}, noon); err != nil {
+				t.Fatalf("writing the item off: %v", err)
+			}
+
+			if err := test.report(store); err != nil {
+				t.Fatalf("reporting back: %v", err)
+			}
+
+			item, err := store.Item("item-1")
+			if err != nil {
+				t.Fatalf("reading the item: %v", err)
+			}
+			if item.State != StateMissingUpstream || !item.MissingSince.Equal(noon) {
+				t.Errorf("the write-off came out as %s, missing since %s; want it still missing since noon",
+					item.State, item.MissingSince)
+			}
+			if item.LocalPath != test.wantPath {
+				t.Errorf("the item's file is recorded as %q, want %q", item.LocalPath, test.wantPath)
+			}
+			again, err := store.Reconcile(albumID, []string{"item-1"}, noon.Add(24*time.Hour))
+			if err != nil {
+				t.Fatalf("reconciling the same absence again: %v", err)
+			}
+			if again != (Departures{}) {
+				t.Errorf("a second walk over the same absence reconciled %+v, want nothing", again)
+			}
+		})
+	}
+}
+
+// SQL compares stored timestamps as strings, so a format whose fractional part varies in width
+// would order them wrongly: time.RFC3339Nano writes noon as "12:00:00Z", which sorts after
+// "12:00:00.5Z". The last moment is an hour later on a clock five hours behind, which written in
+// its own zone would read 08:00 and sort first.
+func TestStoredTimestampsSortChronologically(t *testing.T) {
+	moments := []time.Time{
+		noon,
+		noon.Add(time.Nanosecond),
+		noon.Add(500 * time.Millisecond),
+		noon.Add(time.Second),
+		noon.Add(time.Second + time.Nanosecond),
+		noon.Add(time.Hour).In(time.FixedZone("UTC-5", -5*60*60)),
+	}
+
+	var stored []string
+	for _, moment := range moments {
+		stored = append(stored, formatTime(moment))
+	}
+	if !slices.IsSorted(stored) {
+		t.Errorf("chronologically ordered moments stored out of order: %q", stored)
 	}
 }
 
@@ -610,7 +694,7 @@ func TestTheBackupSetCountsAPhotoOnceHoweverManyAlbumsHoldIt(t *testing.T) {
 		if err := store.SetAlbumSyncMode(albumID, SyncAll); err != nil {
 			t.Fatalf("following %s: %v", albumID, err)
 		}
-		if err := store.LinkItemToAlbum(albumID, "shared-key", noon); err != nil {
+		if err := store.LinkItemToAlbum(albumID, "shared-key"); err != nil {
 			t.Fatalf("linking into %s: %v", albumID, err)
 		}
 	}
@@ -648,6 +732,80 @@ func TestTheBackupSetMeasuresAPhotoHeldUnderTwoKeysOnce(t *testing.T) {
 	}
 	if set.Bytes != 2000 {
 		t.Errorf("the set measures %d bytes, want the shared photo once", set.Bytes)
+	}
+}
+
+// The last whole walk is forgotten when what the library covers changes — its date or whether it
+// is followed at all — and kept when only how it is walked does, or the weekly walk would be owed
+// every time somebody ticked a box.
+func TestChangingWhatTheLibraryCoversOwesAWholeWalk(t *testing.T) {
+	since2020 := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	for name, test := range map[string]struct {
+		instruction LibraryInstruction
+		kept        bool
+	}{
+		"saving it unchanged":      {LibraryInstruction{Mode: SyncAll, Since: since2020}, true},
+		"asking for new ones only": {LibraryInstruction{Mode: SyncAll, Since: since2020, NewOnly: true}, true},
+		"moving the date back":     {LibraryInstruction{Mode: SyncAll, Since: since2020.AddDate(-5, 0, 0)}, false},
+		"clearing the date":        {LibraryInstruction{Mode: SyncAll}, false},
+		"no longer following it":   {LibraryInstruction{Mode: SyncNone, Since: since2020}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := openTestStore(t)
+			if err := store.SetLibrary(LibraryInstruction{Mode: SyncAll, Since: since2020}); err != nil {
+				t.Fatalf("following the library: %v", err)
+			}
+			if err := store.MarkLibraryWalkedInFull(noon); err != nil {
+				t.Fatalf("recording a whole walk: %v", err)
+			}
+
+			if err := store.SetLibrary(test.instruction); err != nil {
+				t.Fatalf("saving the instruction: %v", err)
+			}
+			library, err := store.Library()
+			if err != nil {
+				t.Fatalf("reading the library: %v", err)
+			}
+			if kept := library.WalkedInFullAt.Equal(noon); kept != test.kept {
+				t.Errorf("the last whole walk reads %s after the save; kept: %t, want %t", library.WalkedInFullAt, kept, test.kept)
+			}
+		})
+	}
+}
+
+// An album's "to review" badge links to the queue, so it counts what the queue lists and the grid
+// marks the same items. A flag on an arrival that has since been downloaded asks nothing, and
+// counting it drew a badge pointing at a page with nothing on it.
+func TestAnAlbumCountsOnlyTheReviewsTheQueueWillAsk(t *testing.T) {
+	store := openTestStore(t)
+	albumID := seedFollowedAlbum(t, store, SyncPicked, "arrived", "downloaded-since")
+	if err := store.FlagForReview([]string{"arrived", "downloaded-since"}); err != nil {
+		t.Fatalf("flagging the arrivals: %v", err)
+	}
+	landed := MediaItem{MediaKey: "downloaded-since", Filename: "IMG_0002.jpg", LocalPath: "2026/08/downloaded-since.jpg", SizeBytes: 12}
+	if err := store.MarkDownloaded(landed, noon); err != nil {
+		t.Fatalf("downloading one of them: %v", err)
+	}
+
+	stats, err := store.AlbumStats(albumID)
+	if err != nil {
+		t.Fatalf("summarising the album: %v", err)
+	}
+	waiting, err := store.CountNeedingReview()
+	if err != nil {
+		t.Fatalf("counting the queue: %v", err)
+	}
+	if stats.NeedsReview != 1 || waiting != 1 {
+		t.Errorf("the album counts %d to review and the queue %d, want 1 each", stats.NeedsReview, waiting)
+	}
+	for key, want := range map[string]bool{"arrived": true, "downloaded-since": false} {
+		item, err := store.Item(key)
+		if err != nil {
+			t.Fatalf("reading %s: %v", key, err)
+		}
+		if item.AwaitsReview() != want {
+			t.Errorf("%s awaits review: %t, want %t", key, item.AwaitsReview(), want)
+		}
 	}
 }
 
@@ -902,7 +1060,7 @@ func seedAlbumOfItems(t *testing.T, store *Store, albumID, title string, capture
 		if err := store.UpsertItem(MediaItem{MediaKey: key, Filename: key + ".jpg", CapturedAt: capturedAt}, noon); err != nil {
 			t.Fatalf("seeding %s: %v", key, err)
 		}
-		if err := store.LinkItemToAlbum(albumID, key, noon); err != nil {
+		if err := store.LinkItemToAlbum(albumID, key); err != nil {
 			t.Fatalf("linking %s: %v", key, err)
 		}
 	}
@@ -1066,4 +1224,228 @@ func TestAnItemIsFoundByTheNameOfItsFile(t *testing.T) {
 	if _, err := s.ItemStoredAs("AF1QipKEY%PXL_1.MP.jpg"); err == nil {
 		t.Error("a % in the name matched as a wildcard")
 	}
+}
+
+// A nightly walk re-lists everything the library already holds, and every one of those items used
+// to be written back exactly as it was: 98,000 row updates and 98,000 link updates a night to say
+// only that the walk had seen them again, which SQLite's write-ahead log turned into gigabytes of
+// block I/O a day for a 52,000-item library.
+//
+// SQLite counts the rows each statement changes, so "a walk over unchanged contents writes
+// nothing" is measurable rather than argued: a second identical walk has to leave the count
+// exactly where the first one left it.
+func TestAWalkOverUnchangedContentsChangesNothing(t *testing.T) {
+	store := openTestStore(t)
+	albumID := seedFollowedAlbum(t, store, SyncAll, "listed", "downloaded")
+
+	// Most of a library is already on disk, which is the case that matters: a walk over an item
+	// whose download state is the newest thing about it has to leave that alone too.
+	done := MediaItem{MediaKey: "downloaded", Filename: "downloaded.jpg", CapturedAt: noon,
+		LocalPath: "/pool/downloaded.jpg", SizeBytes: 4096, SHA256: "abc"}
+	if err := store.MarkDownloaded(done, noon); err != nil {
+		t.Fatalf("marking an item downloaded: %v", err)
+	}
+
+	walk := func(at time.Time) {
+		t.Helper()
+		for _, key := range []string{"listed", "downloaded"} {
+			item := MediaItem{MediaKey: key, Filename: key + ".jpg", CapturedAt: noon}
+			if err := store.UpsertItem(item, at); err != nil {
+				t.Fatalf("re-listing %s: %v", key, err)
+			}
+			if err := store.LinkItemToAlbum(albumID, key); err != nil {
+				t.Fatalf("re-linking %s: %v", key, err)
+			}
+		}
+	}
+
+	walk(noon)
+	before := changedRows(t, store)
+	walk(noon.Add(24 * time.Hour))
+
+	if after := changedRows(t, store); after != before {
+		t.Errorf("a second walk over the same contents changed %d rows, want none", after-before)
+	}
+
+	item, err := store.Item("downloaded")
+	if err != nil {
+		t.Fatalf("reading the downloaded item: %v", err)
+	}
+	if item.State != StateDone || item.LocalPath != "/pool/downloaded.jpg" {
+		t.Errorf("a re-listed item is %q at %q, want the download the walk found",
+			item.State, item.LocalPath)
+	}
+}
+
+// changedRows is SQLite's own count of what this connection has inserted, updated or deleted.
+func changedRows(t *testing.T, store *Store) int {
+	t.Helper()
+
+	var changes int
+	if err := store.db.QueryRow(`SELECT total_changes()`).Scan(&changes); err != nil {
+		t.Fatalf("reading SQLite's change count: %v", err)
+	}
+	return changes
+}
+
+// The listing is the only source of the capture date, the thumbnail URL and the video flag, so
+// skipping the write for an item that is unchanged must not become skipping it for one that is
+// not. Each case changes one field alone: the write is guarded by one condition per field, and a
+// change riding along with another would hide the loss of its own.
+func TestARelistingStillRefreshesWhatTheListingOwns(t *testing.T) {
+	for _, change := range []struct {
+		field string
+		apply func(*MediaItem)
+	}{
+		{"capture date", func(item *MediaItem) { item.CapturedAt = noon.Add(time.Hour) }},
+		{"thumbnail", func(item *MediaItem) { item.ThumbnailURL = "https://lh3.example/new" }},
+		{"video flag", func(item *MediaItem) { item.IsVideo = true }},
+	} {
+		t.Run(change.field, func(t *testing.T) {
+			store := openTestStore(t)
+			seedFollowedAlbum(t, store, SyncAll, "item-1")
+
+			relisted := relistedUnchanged
+			change.apply(&relisted)
+			if err := store.UpsertItem(relisted, noon.Add(24*time.Hour)); err != nil {
+				t.Fatalf("re-listing the item: %v", err)
+			}
+
+			item, err := store.Item("item-1")
+			if err != nil {
+				t.Fatalf("reading the item: %v", err)
+			}
+			if !item.CapturedAt.Equal(relisted.CapturedAt) || item.ThumbnailURL != relisted.ThumbnailURL ||
+				item.IsVideo != relisted.IsVideo {
+				t.Errorf("a re-listing that changed the %s left the item at captured %s, thumbnail %q, video %t; want %s, %q, %t",
+					change.field, item.CapturedAt, item.ThumbnailURL, item.IsVideo,
+					relisted.CapturedAt, relisted.ThumbnailURL, relisted.IsVideo)
+			}
+		})
+	}
+}
+
+// Migrations are a one-way trip taken on data somebody already has, and they are taken at startup:
+// one that cannot run leaves the backup not merely stale but not running at all. So this is the
+// upgrade path itself — a database at the schema as it stood at the last release, holding rows,
+// opened by the code as it is now.
+//
+// The schema is the one 0.4.2 left, built by replaying its sixteen migrations rather than by adding
+// the dropped columns back onto today's: a migration runs against exactly what its predecessors
+// left, constraints and all, and the rows are written in that release's terms for the same reason.
+func TestTheMigrationsRunOnADatabaseThatAlreadyHasRows(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	lastRelease := storeAtVersion(t, path, 16)
+
+	seen := formatTime(noon)
+	for _, statement := range []string{
+		`INSERT INTO albums (id, title, sync_mode, first_seen_at, last_seen_at) VALUES ('album-1', 'Holiday', 'all', ?1, ?1)`,
+		`INSERT INTO media_items (media_key, filename, captured_at, mime_type, state, local_path, first_seen_at, last_seen_at)
+		VALUES ('item-1', 'item-1.jpg', ?1, 'image/jpeg', 'done', '2026/08/item-1.jpg', ?1, ?1),
+		       ('item-2', 'item-2.mp4', ?1, 'video/mp4', 'discovered', NULL, ?1, ?1)`,
+		`INSERT INTO album_items (album_id, media_key, last_seen_at) VALUES ('album-1', 'item-1', ?1), ('album-1', 'item-2', ?1)`,
+		`UPDATE albums SET sync_mode = 'all', last_synced_at = ?1 WHERE id = 'library'`,
+	} {
+		if _, err := lastRelease.db.Exec(statement, seen); err != nil {
+			t.Fatalf("writing the rows 0.4.2 would have held: %v", err)
+		}
+	}
+	if err := lastRelease.Close(); err != nil {
+		t.Fatalf("closing the store: %v", err)
+	}
+
+	upgraded, err := Open(path)
+	if err != nil {
+		t.Fatalf("opening a database the migrations have to upgrade: %v", err)
+	}
+	defer upgraded.Close()
+
+	members, err := upgraded.AlbumMembers("album-1")
+	if err != nil {
+		t.Fatalf("reading the membership after the migrations: %v", err)
+	}
+	if len(members) != 2 {
+		t.Errorf("the album holds %d members after the migrations, want the 2 it held before", len(members))
+	}
+	item, err := upgraded.Item("item-1")
+	if err != nil {
+		t.Fatalf("an item did not survive the migrations: %v", err)
+	}
+	if item.State != StateDone || item.LocalPath != "2026/08/item-1.jpg" || !item.CapturedAt.Equal(noon) {
+		t.Errorf("a downloaded item came through the migrations as %s at %q captured %s, want done at its path, captured at noon",
+			item.State, item.LocalPath, item.CapturedAt)
+	}
+
+	// Every walk 0.4.2 made was a whole one, so the last of them is the last whole walk, and the
+	// weekly one is not owed the first night after upgrading.
+	library, err := upgraded.Library()
+	if err != nil {
+		t.Fatalf("reading the library after the migrations: %v", err)
+	}
+	if !library.WalkedInFullAt.Equal(noon) || library.NewOnly || !library.WeeklyFullWalk {
+		t.Errorf("the library came through as walked whole %s, new only %t, weekly %t; want noon, false, true",
+			library.WalkedInFullAt, library.NewOnly, library.WeeklyFullWalk)
+	}
+
+	for table, dropped := range map[string][]string{
+		"album_items": {"last_seen_at"},
+		"media_items": {"last_seen_at", "mime_type"},
+	} {
+		columns, err := tableColumns(t, upgraded, table)
+		if err != nil {
+			t.Fatalf("reading the columns of %s: %v", table, err)
+		}
+		for _, column := range dropped {
+			if slices.Contains(columns, column) {
+				t.Errorf("%s still carries %s after the migrations", table, column)
+			}
+		}
+	}
+}
+
+// storeAtVersion builds the database a release left behind by replaying the migrations up to its
+// last one, as that release's own Open did.
+func storeAtVersion(t *testing.T, path string, version int) *Store {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", dsn(path))
+	if err != nil {
+		t.Fatalf("opening %s: %v", path, err)
+	}
+	db.SetMaxOpenConns(1)
+	store := &Store{db: db}
+
+	migrations, err := pendingMigrations(0)
+	if err != nil {
+		t.Fatalf("reading the migrations: %v", err)
+	}
+	for _, migration := range migrations {
+		if migration.version > version {
+			break
+		}
+		if err := store.apply(migration); err != nil {
+			t.Fatalf("applying migration %s: %v", migration.name, err)
+		}
+	}
+	return store
+}
+
+func tableColumns(t *testing.T, store *Store, table string) ([]string, error) {
+	t.Helper()
+
+	rows, err := store.db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var columns []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		columns = append(columns, name)
+	}
+	return columns, rows.Err()
 }

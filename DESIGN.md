@@ -591,6 +591,17 @@ is still unmeasured.
 - What deliberately does **not** live here: web UI sessions (in-memory only — a daemon
   restart logs the single user out, which is acceptable; see §15) and the thumbnail cache
   (plain files with no index table, §11).
+- **A walk records what changed, not what it saw.** The one thing a nightly run has in
+  quantity is items it already knows about — 97,860 re-listed on a 52,608-item library — and
+  writing every one of them back to say "still here" cost gigabytes of block I/O a day once
+  SQLite's write-ahead log had journaled the pages: measured 2026-10-07, 27 MB/s sustained
+  and 11 GB inside one run, on a day whose real work was three downloaded files. Seen-ness is
+  therefore no longer a column. A walk keeps the set of what it went past in memory, reads
+  the membership before it starts, and hands the store only the members that differ; an item
+  the listing describes exactly as the store already holds it is left alone as well. The
+  second identical walk over a library changes no item or membership row, and
+  `TestAWalkOverUnchangedContentsChangesNothing` is that claim as a measurement, read off
+  SQLite's own change counter.
 
 ```sql
 CREATE TABLE albums (
@@ -604,6 +615,9 @@ CREATE TABLE albums (
     owner_name    TEXT NOT NULL DEFAULT '',      -- who it came from; '' when unknown
     owner_is_account INTEGER NOT NULL DEFAULT 0, -- resolved at sync time against WIZ S06Grb
     since_date    TEXT,                          -- library only: oldest capture worth walking
+    new_only      INTEGER NOT NULL DEFAULT 0,    -- library only: stop at the first page held
+    weekly_full_walk INTEGER NOT NULL DEFAULT 1, -- library only: still walk it all once a week
+    walked_in_full_at TEXT,                      -- library only: the last walk not stopped early
     first_seen_at TEXT NOT NULL,
     last_seen_at  TEXT NOT NULL,
     last_synced_at TEXT
@@ -614,14 +628,12 @@ CREATE TABLE media_items (
     filename      TEXT NOT NULL,
     captured_at   TEXT,
     size_bytes    INTEGER,
-    mime_type     TEXT,
     sha256        TEXT,
     state         TEXT NOT NULL DEFAULT 'discovered',
                   -- discovered | queued | downloading | done | failed | missing_upstream
     fail_count    INTEGER NOT NULL DEFAULT 0,
     local_path    TEXT,
     first_seen_at TEXT NOT NULL,
-    last_seen_at  TEXT NOT NULL,
     downloaded_at TEXT,
     missing_since TEXT,
     needs_review  INTEGER NOT NULL DEFAULT 0   -- feeds the web review queue (§10)
@@ -630,7 +642,6 @@ CREATE TABLE media_items (
 CREATE TABLE album_items (
     album_id   TEXT NOT NULL REFERENCES albums(id),
     media_key  TEXT NOT NULL REFERENCES media_items(media_key),
-    last_seen_at TEXT NOT NULL,
     PRIMARY KEY (album_id, media_key)
 );
 
@@ -735,24 +746,45 @@ A run is: **warmup → list → plan → download → report.** (The canary once
 warmup and list was decided against; §5 says why.)
 
 - **List:** enumerate albums (upsert all, so the web UI is always current), then page
-  through each followed album and, if `[Library]` is followed, the timeline. Update
-  `last_seen_at` on everything touched.
+  through each followed album and, if `[Library]` is followed, the timeline. Record only
+  what has changed: an item the listing describes exactly as the store already holds it, and
+  a membership that is already there, are both left alone. Seen-ness is not stored at all:
+  the walk already holds in memory the set of what it went past, which is all a last-seen
+  column was ever written to reconstruct.
+- **Looking only for what is new:** the library walk was half of every night — 6m49s of a
+  13m42s listing on 2026-10-07, 52,403 items in about 175 pages — to find what was new at
+  the top, which that week was between none and 36 items a night. With `new_only` set it
+  stops at the first page every item of which the library already held, which on a quiet
+  night is one page. The timeline is ordered by capture date, not upload date, so this
+  misses a photo uploaded with an old date (a scan, an import, a photo saved from someone
+  else's album): it lands below where the walk stops. That is what the weekly whole walk is
+  for, and it notices deletions further back too; it can be turned off, which is the user
+  choosing never to learn of either. Moving the date bound, or following the library again,
+  forgets the last whole walk, so the next walk is a whole one weekly walk or not: what the
+  change asks for lies below where a nightly walk would stop. A page with no dated item is
+  no ground to stop on, since it cannot say where in the timeline it is. Albums are still
+  walked whole every night — they are the other half of the run, and the same trick would
+  need a signal for "this album changed" that the album listing does not obviously give.
 - **Plan:** pure function from store state to a work list — selected ∧ not `done` →
   download; selected ∧ `done` but file missing on disk → re-download; new in `picked`
   albums → `needs_review`.
 - **Reconcile:** a full album listing that omits an item proves the item has left *that
-  album*, and the membership row goes. It proves nothing about Google: `missing_upstream`
-  is set only when no other album still lists the item. The library counts as one of those
-  albums. Its walk is reconciled too — otherwise a deletion would be undetectable for the
-  majority of a library that is in no album — but only over the stretch of timeline the
-  walk can vouch for: at or above the date bound, plus 48h of clearance when the walk
-  stopped there rather than reaching the end, because capture times carry the camera's own
-  timezone and wobble out of order around the boundary. Below that, and for items whose
-  capture date Google never reported, the walk skipped rather than missed them, and the
-  conservative failure (keeping a photo Google deleted) costs disk while the aggressive one
-  (writing off a photo that is still there) costs the backup. A walk that listed nothing
-  reconciles nothing: an empty timeline is a failure, not an empty account. A partial
-  listing must never reach this step at all.
+  album*, and the membership row goes. It proves nothing about Google: `missing_upstream` is
+  set only when no other album still lists the item. The library counts as one of those
+  albums. What the walk proves follows from the difference between the membership it read
+  before it started and what it went past, so it is the walk that decides what it vouches
+  for and the store that is told. The library's walk is reconciled too — otherwise a
+  deletion would be undetectable for the majority of a library that is in no album — but
+  only over the stretch of timeline the walk can vouch for: at or above the date bound, plus
+  48h of clearance when the walk stopped there rather than reaching the end, because capture
+  times carry the camera's own timezone and wobble out of order around the boundary. A walk
+  that stopped at photos it already held vouches the same way, from the oldest capture on
+  its last page plus the same 48h. Below that, and for items whose capture date Google never
+  reported, the walk skipped rather than missed them, and the conservative failure (keeping
+  a photo Google deleted) costs disk while the aggressive one (writing off a photo that is
+  still there) costs the backup. A walk that listed nothing reconciles nothing: an empty
+  timeline is a failure, not an empty account. A partial listing must never reach this step
+  at all.
 - **Edits upstream:** Google Photos keeps the original alongside edits. Which variant the
   download endpoint returns for edited photos is settled in the spike; v1 policy is
   **first-downloaded bytes are kept and never silently replaced** (open question).

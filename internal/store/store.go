@@ -158,10 +158,13 @@ func (s *Store) userVersion() (int, error) {
 }
 
 // timestampLayout is RFC3339 in UTC with a fixed-width fractional part. The width matters:
-// SQL compares these as strings, and time.RFC3339Nano trims trailing zeros, so
-// "12:00:00Z" would sort after "12:00:00.5Z" and a vanished item could slip past
-// ItemsMissingFrom undetected. Padding every value to nine digits makes lexical order and
-// chronological order the same thing.
+// SQL compares these as strings, and time.RFC3339Nano trims trailing zeros, so "12:00:00Z"
+// would sort after "12:00:00.5Z". Every ORDER BY captured_at relies on the two orders agreeing,
+// and so do session expiry and the grid's range selection, which compare them directly. Padding
+// every value to nine digits makes lexical order and chronological order the same thing.
+//
+// The format is also what UpsertItem compares a re-listed capture date against, so changing it
+// would rewrite every row in the library once, on the first walk after the change.
 const timestampLayout = "2006-01-02T15:04:05.000000000Z07:00"
 
 func formatTime(at time.Time) string {

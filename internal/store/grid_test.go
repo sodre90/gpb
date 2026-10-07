@@ -20,7 +20,7 @@ func seedDatedAlbum(t *testing.T, store *Store, captures map[string]time.Time) s
 		if err := store.UpsertItem(MediaItem{MediaKey: key, Filename: key + ".jpg", CapturedAt: capturedAt}, noon); err != nil {
 			t.Fatalf("seeding %s: %v", key, err)
 		}
-		if err := store.LinkItemToAlbum(albumID, key, noon); err != nil {
+		if err := store.LinkItemToAlbum(albumID, key); err != nil {
 			t.Fatalf("linking %s: %v", key, err)
 		}
 	}

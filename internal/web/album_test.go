@@ -34,7 +34,7 @@ func seedItems(t *testing.T, server *Server, albumID string, count int) []string
 		if err := server.store.UpsertItem(item, now); err != nil {
 			t.Fatalf("seeding item %s: %v", key, err)
 		}
-		if err := server.store.LinkItemToAlbum(albumID, key, now); err != nil {
+		if err := server.store.LinkItemToAlbum(albumID, key); err != nil {
 			t.Fatalf("linking %s: %v", key, err)
 		}
 		keys = append(keys, key)
@@ -202,7 +202,7 @@ func TestPicksCannotReachOutsideTheAlbum(t *testing.T) {
 	if err := server.store.UpsertItem(secret, now); err != nil {
 		t.Fatalf("seeding the other album's item: %v", err)
 	}
-	if err := server.store.LinkItemToAlbum("private", secret.MediaKey, now); err != nil {
+	if err := server.store.LinkItemToAlbum("private", secret.MediaKey); err != nil {
 		t.Fatalf("linking the other album's item: %v", err)
 	}
 
@@ -611,7 +611,7 @@ func TestASavedPageCannotClearPicksInAnotherAlbum(t *testing.T) {
 	if err := server.store.UpsertItem(elsewhere, now); err != nil {
 		t.Fatalf("seeding the other album's item: %v", err)
 	}
-	if err := server.store.LinkItemToAlbum("private", elsewhere.MediaKey, now); err != nil {
+	if err := server.store.LinkItemToAlbum("private", elsewhere.MediaKey); err != nil {
 		t.Fatalf("linking the other album's item: %v", err)
 	}
 	if err := server.store.SetSelection([]string{elsewhere.MediaKey}, true); err != nil {

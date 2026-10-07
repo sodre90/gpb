@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"gpb/internal/store"
 	"gpb/internal/syncer"
@@ -64,6 +65,8 @@ const unnamedFile = "a photo"
 // anything is running before it can name what it is looking at.
 type historyRow struct {
 	StartedAt   string
+	FinishedAt  string
+	Duration    string
 	Outcome     store.Outcome
 	Finished    bool
 	StillGoing  bool
@@ -241,6 +244,10 @@ func historyRowFor(run store.SyncRun, liveRunID int64) historyRow {
 		Downloaded:  run.Downloaded,
 		Failed:      run.Failed,
 		Error:       firstLine(run.Error),
+	}
+	if finished {
+		row.FinishedAt = humanTime(run.FinishedAt)
+		row.Duration = humanDuration(run.FinishedAt.Sub(run.StartedAt).Round(time.Second))
 	}
 	if run.Bytes > 0 {
 		row.Size = humanBytes(run.Bytes)

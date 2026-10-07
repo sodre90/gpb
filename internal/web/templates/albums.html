@@ -109,6 +109,15 @@
     </select>
     <label for="library-since">taken since</label>
     <input id="library-since" type="date" name="since" value="{{.Since}}">
+    <div class="library-form-walk">
+      <label><input type="checkbox" name="new_only" value="1"{{if .NewOnly}} checked{{end}}>
+        Each night, look only for what is new</label>
+      <label class="library-form-weekly"><input type="checkbox" name="weekly_full_walk" value="1"{{if .WeeklyFullWalk}} checked{{end}}>
+        and walk the whole library once a week</label>
+      <p class="small muted">A nightly walk stops at the first page of photos it already has. The
+        weekly one is what finds a photo uploaded with an old date, and notices one deleted from
+        further back.</p>
+    </div>
     <button type="submit">Save</button>
   </form>
   {{if .Following}}
@@ -117,6 +126,7 @@
     {{if .Pending}}<span class="muted">· {{count .Pending}} to go</span>{{end}}
     {{if .Failed}}<span class="error">· {{count .Failed}} failed</span>{{end}}
     {{if .LastSynced}}<span class="muted">· last walked {{.LastSynced}}</span>{{end}}
+    {{if and .NewOnly .WalkedInFull}}<span class="muted">· last walked in full {{.WalkedInFull}}</span>{{end}}
   </p>
   {{end}}
 </section>

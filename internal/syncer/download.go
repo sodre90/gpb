@@ -17,12 +17,11 @@ import (
 )
 
 type downloaded struct {
-	Path        string
-	Size        int64
-	SHA256      string
-	ContentType string
-	Filename    string
-	Resumed     bool
+	Path     string
+	Size     int64
+	SHA256   string
+	Filename string
+	Resumed  bool
 }
 
 // fetch runs the write protocol for one item: stream into a .part file on the pool's own
@@ -95,11 +94,10 @@ func (s *Syncer) stream(ctx context.Context, item store.MediaItem, albumID, part
 	}
 
 	return downloaded{
-		Size:        download.Size,
-		SHA256:      hex.EncodeToString(digest.Sum(nil)),
-		ContentType: download.ContentType,
-		Filename:    download.Filename,
-		Resumed:     offset > 0,
+		Size:     download.Size,
+		SHA256:   hex.EncodeToString(digest.Sum(nil)),
+		Filename: download.Filename,
+		Resumed:  offset > 0,
 	}, nil
 }
 

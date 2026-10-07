@@ -23,7 +23,7 @@ func TestTheDashboardCountsAreRememberedBetweenRecounts(t *testing.T) {
 		if err := daemon.store.UpsertItem(store.MediaItem{MediaKey: key, Filename: key + ".jpg"}, now); err != nil {
 			t.Fatal(err)
 		}
-		if err := daemon.store.LinkItemToAlbum("a", key, now); err != nil {
+		if err := daemon.store.LinkItemToAlbum("a", key); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -43,5 +43,34 @@ func TestTheDashboardCountsAreRememberedBetweenRecounts(t *testing.T) {
 	}
 	if later, _ := daemon.countBackupSet(false, now.Add(time.Minute+recountWhileIdle)); later.Known != 2 {
 		t.Errorf("after the idle interval the count is %d, want a fresh 2", later.Known)
+	}
+}
+
+// A dashboard's library switch is one setting out of four, and switching it must leave the
+// other three as the albums page last saved them — a date bound dropped on the way through is a
+// walk of the whole account, and a weekly walk dropped is deletions nobody notices.
+func TestSwitchingTheLibraryFromADashboardKeepsTheRestOfItsInstruction(t *testing.T) {
+	daemon := scheduledDaemon(t, "03:30")
+	saved := store.LibraryInstruction{
+		Mode:           store.SyncNone,
+		Since:          time.Date(2020, 6, 1, 0, 0, 0, 0, time.UTC),
+		NewOnly:        true,
+		WeeklyFullWalk: false,
+	}
+	if err := daemon.store.SetLibrary(saved); err != nil {
+		t.Fatalf("saving the instruction: %v", err)
+	}
+
+	if err := daemon.SetLibraryMode(string(store.SyncAll)); err != nil {
+		t.Fatalf("switching the library on: %v", err)
+	}
+
+	library, err := daemon.store.Library()
+	if err != nil {
+		t.Fatalf("reading the library: %v", err)
+	}
+	saved.Mode = store.SyncAll
+	if got := library.LibraryInstruction(); got != saved {
+		t.Errorf("the library reads %+v after the switch, want %+v", got, saved)
 	}
 }

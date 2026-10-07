@@ -22,6 +22,9 @@
   --ink: light-dark(#1b1d21, #e8e8e6);
   --muted: light-dark(#5d6167, #9a9ea6);
   --line: color-mix(in srgb, currentColor 18%, transparent);
+  /* --line takes the colour of whatever it borders, which drew a table's row line dimmer under
+     its muted date cells than under the rest of the row. A line across cells is the page's. */
+  --rule: color-mix(in srgb, var(--ink) 18%, transparent);
   --tint: color-mix(in srgb, currentColor 5%, transparent);
 
   --ok: light-dark(#1a7f4b, #4cc38a);
@@ -505,11 +508,16 @@ table.runs td {
   text-align: left;
   vertical-align: top;
   padding: var(--s-2) var(--s-3);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--rule);
 }
 
 table.runs td {
   font-size: var(--t-small);
+}
+
+/* "148.0 GB" broken over two lines reads as two figures. */
+table.runs td.num {
+  white-space: nowrap;
 }
 
 table.albums tr.albums-followed td {
@@ -881,6 +889,26 @@ details.diagnostics summary {
   min-width: 12rem;
 }
 
+.library-form-walk {
+  flex-basis: 100%;
+  display: grid;
+  gap: var(--s-1);
+}
+
+.library-form-walk p {
+  margin: 0;
+}
+
+.library-form-walk label {
+  display: flex;
+  gap: var(--s-2);
+  align-items: baseline;
+}
+
+.library-form-weekly {
+  margin-left: var(--s-5);
+}
+
 .crumbs {
   margin: var(--s-3) 0 0;
   font-size: var(--t-small);
@@ -930,6 +958,26 @@ iframe.vnc {
   table.albums .albums-created,
   table.albums .albums-items {
     display: none;
+  }
+
+  /* A phone keeps when a run started, how it ended and what it brought down. A failure still
+     shows there, as the outcome and the line under it. */
+  table.runs .runs-finished,
+  table.runs .runs-listed,
+  table.runs .runs-failed,
+  table.runs .runs-size {
+    display: none;
+  }
+
+  table.runs th,
+  table.runs td {
+    padding-inline: var(--s-2);
+  }
+
+  /* Those three fit a 390px phone. On anything narrower the table scrolls, not the page. */
+  table.runs {
+    display: block;
+    overflow-x: auto;
   }
 
   .grid {

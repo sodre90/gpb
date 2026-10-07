@@ -270,7 +270,6 @@ func (s *Syncer) recordSuccess(item store.MediaItem, result downloaded) error {
 		LocalPath: result.Path,
 		SizeBytes: result.Size,
 		SHA256:    result.SHA256,
-		MimeType:  result.ContentType,
 	}
 	if err := s.store.MarkDownloaded(landed, time.Now()); err != nil {
 		return err

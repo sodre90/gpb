@@ -250,7 +250,7 @@ func seedPhotographsLargerThanAnyWindow(t *testing.T, server *Server, albumID st
 		if err := server.store.UpsertItem(item, now); err != nil {
 			t.Fatalf("seeding %s: %v", key, err)
 		}
-		if err := server.store.LinkItemToAlbum(albumID, key, now); err != nil {
+		if err := server.store.LinkItemToAlbum(albumID, key); err != nil {
 			t.Fatalf("linking %s: %v", key, err)
 		}
 		if err := server.store.MarkDownloaded(item, now); err != nil {

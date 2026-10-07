@@ -190,7 +190,7 @@ func cellFor(item store.MediaItem, picked bool) itemCell {
 		Missing:    item.State == store.StateMissingUpstream,
 		Failed:     item.State == store.StateFailed,
 		Downloaded: item.LocalPath != "",
-		Review:     item.NeedsReview,
+		Review:     item.AwaitsReview(),
 		Size:       humanBytes(item.SizeBytes),
 	}
 }

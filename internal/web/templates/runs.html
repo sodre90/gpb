@@ -23,34 +23,37 @@
 <table class="runs">
   <thead>
     <tr>
-      <th>Started</th><th>Outcome</th><th class="num">Listed</th>
-      <th class="num">Downloaded</th><th class="num">Failed</th><th class="num">Size</th>
+      <th>Started</th><th class="runs-finished">Finished</th><th>Outcome</th>
+      <th class="num runs-listed">Listed</th><th class="num">Downloaded</th>
+      <th class="num runs-failed">Failed</th><th class="num runs-size">Size</th>
     </tr>
   </thead>
   <tbody>
   {{range .History}}
     <tr>
       <td class="date">{{.StartedAt}}</td>
+      <td class="date runs-finished">{{if .Finished}}{{.FinishedAt}}<br><span class="muted">took {{.Duration}}</span>{{else}}—{{end}}</td>
       <td>
         {{if .Finished}}<span class="outcome {{.Outcome}}">{{.Outcome}}</span>
         {{else if .StillGoing}}<span class="badge">still going</span>
         {{else}}<span class="badge warn">interrupted</span>{{end}}
       </td>
       {{if .Finished}}
-        <td class="num">{{count .Listed}}</td>
+        <td class="num runs-listed">{{count .Listed}}</td>
         <td class="num">{{count .Downloaded}}</td>
-        <td class="num">{{count .Failed}}</td>
-        <td class="num">{{if .Size}}{{.Size}}{{else}}—{{end}}</td>
+        <td class="num runs-failed">{{count .Failed}}</td>
+        <td class="num runs-size">{{if .Size}}{{.Size}}{{else}}—{{end}}</td>
       {{else}}
-        <td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+        <td class="num runs-listed">—</td><td class="num">—</td>
+        <td class="num runs-failed">—</td><td class="num runs-size">—</td>
       {{end}}
     </tr>
     {{if .Interrupted}}
-    <tr><td></td><td colspan="5" class="runs-detail">Started and never finished: the daemon stopped
+    <tr><td></td><td colspan="6" class="runs-detail">Started and never finished: the daemon stopped
       before it could say how it went. Nothing downloaded was lost; the next run picked up where
       it left off.</td></tr>
     {{end}}
-    {{with .Error}}<tr><td></td><td colspan="5" class="runs-detail wrap">{{.}}</td></tr>{{end}}
+    {{with .Error}}<tr><td></td><td colspan="6" class="runs-detail wrap">{{.}}</td></tr>{{end}}
   {{end}}
   </tbody>
 </table>

@@ -173,7 +173,9 @@ func (d *Daemon) SetLibraryMode(mode string) error {
 	if err != nil {
 		return fmt.Errorf("reading the library setting: %w", err)
 	}
-	return d.store.SetLibrary(store.SyncMode(mode), library.Since)
+	instruction := library.LibraryInstruction()
+	instruction.Mode = store.SyncMode(mode)
+	return d.store.SetLibrary(instruction)
 }
 
 func (d *Daemon) SetAlbumMode(albumID, mode string) error {

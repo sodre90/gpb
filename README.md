@@ -16,7 +16,8 @@ tour.
   videos untranscoded, and `<photos>/albums/` is a symlink view so the backup is browsable in a
   file manager.
 - **Curation is the point.** Follow an album in full, follow only items you pick, or leave it
-  alone. Whole-library backup is one switch, with an optional "taken since" date.
+  alone. Whole-library backup is one switch, with an optional "taken since" date, and can look
+  only for what is new each night while still walking all of it once a week.
 - **Shows you the photographs while you choose**, including the ones it has deliberately not
   downloaded: thumbnails are fetched through the daemon and cached, because the browser has no
   Google session and must never be given one.
