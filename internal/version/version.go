@@ -4,4 +4,4 @@
 // build somebody does by hand at midnight.
 package version
 
-const Current = "0.5.1"
+const Current = "0.5.2"

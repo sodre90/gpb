@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2 — 2026-10-07
+
+- **The top bar says which release is running**, beside the gpb name, on every page once you are
+  signed in. The login page leaves it out, so it tells a stranger nothing about which bugs to try.
+
 ## 0.5.1 — 2026-10-07
 
 - **The library's two walk boxes read as one setting.** The weekly walk now sits under the box it
