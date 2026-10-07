@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.5.0 — 2026-10-07
+
+- **A nightly run no longer rewrites the library to say nothing has changed.** Every walk wrote
+  each item it went past back to the database with the moment it saw it: 97,860 row updates a
+  night on the 52,608-item library this was measured on, and 11 GB of disk writes inside one
+  run, at 27 MB/s, on a day whose real work was three downloaded files. A walk now keeps what it
+  saw in memory and tells the database only what differs, so an item listed exactly as it is
+  already held, and a membership already recorded, are left alone. Deletions are noticed as
+  before, from what an album held when the walk began less what the walk went past. This alone
+  leaves a run as long as it was, since that time is Google's pacing — the next item is what
+  shortens it — but the disk under it is no longer busy for the length of it.
+- **The library can look only for what is new.** A new box under "Your whole library" stops
+  the nightly walk at the first page of photos it already holds — one page instead of about
+  175 on that same library, where the walk was half of every night. The timeline is ordered by
+  capture date rather than upload date, so a photo uploaded with an old date sorts below where
+  the walk stops; a second box, on by default, still walks the whole library once a week to
+  find those and to notice deletions further back. A deletion among the photos the walk read
+  is noticed the same night, unless it was taken within two days of where the walk stopped.
+  Moving the date back makes the next walk a whole one, with the weekly walk on or off. The
+  albums are walked in full every night, as before.
+- **The Activity page says when each run finished and how long it took**, beside when it
+  started, and fits a phone: there it keeps the start, the outcome and what was downloaded.
+- **A photo deleted from Google while it was downloading stays written off.** The download
+  finishing afterwards used to mark it backed up again, leaving it neither in the review queue
+  nor noticed the next time it went. An album's "to review" badge now counts only what the
+  review queue will actually show.
+- **Turning https off no longer locks out the browsers that used it.** The right password led
+  back to the login page: a browser will not let an http page replace the secure cookie it was
+  given over https, and both used one name. Each now has its own, so everyone signs in once
+  after upgrading. On 0.4.2, deleting the site's cookies in the browser gets you back in.
+- **Upgrading drops three columns from the database:** the last-seen time on every item and
+  every album membership, and the item's MIME type, which nothing ever read. It adds the
+  library's two new settings and the date of its last whole walk. On a copy of a 97,428-item
+  database the migrations that drop the columns took under a second. It is one-way: 0.4.2
+  names the dropped columns in every query that reads an item, so against an upgraded database
+  it can neither back up nor show a grid of photos. Copy `state.db` aside first if you might
+  want to go back. Every browser has to sign in once more, because the session cookie has a new
+  name.
+
 ## 0.4.2 — 2026-09-23
 
 - **The overview's "on disk" now includes the second copies not yet linked.** 0.4.1 counted a
