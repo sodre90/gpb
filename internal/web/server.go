@@ -268,7 +268,7 @@ func (s *Server) requireSessionForFragment(next http.Handler) http.Handler {
 
 func (s *Server) guardedBySession(next http.Handler, reject http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie(sessionCookieName)
+		cookie, err := r.Cookie(s.sessionCookieName())
 		if err != nil || !s.sessions.touch(cookie.Value) {
 			reject(w, r)
 			return

@@ -11,10 +11,16 @@ import (
 	"gpb/internal/store"
 )
 
+// Two cookie names, one per scheme, so that neither can stand in the other's way. A browser will
+// not let a page served over http replace a Secure cookie of the same name, and while both schemes
+// shared gpb_session, a UI moved from https to http answered the right password with the login
+// page until the old cookie was deleted by hand. __Host- has the browser accept the https one only
+// from this host, over https, for the whole site.
 const (
-	sessionCookieName = "gpb_session"
-	sessionIDBytes    = 32
-	absoluteTTL       = 90 * 24 * time.Hour
+	httpSessionCookie  = "gpb_http_session"
+	httpsSessionCookie = "__Host-gpb_session"
+	sessionIDBytes     = 32
+	absoluteTTL        = 90 * 24 * time.Hour
 )
 
 // sessionStore keeps sessions in the database rather than in the process, so that a redeploy —

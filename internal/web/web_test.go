@@ -228,12 +228,16 @@ func get(handler http.Handler, path string, cookie *http.Cookie) *httptest.Respo
 func sessionCookieFrom(t *testing.T, recorder *httptest.ResponseRecorder) *http.Cookie {
 	t.Helper()
 	for _, cookie := range recorder.Result().Cookies() {
-		if cookie.Name == sessionCookieName && cookie.Value != "" {
+		if isSessionCookie(cookie) {
 			return cookie
 		}
 	}
 	t.Fatal("the response set no session cookie")
 	return nil
+}
+
+func isSessionCookie(cookie *http.Cookie) bool {
+	return (cookie.Name == httpSessionCookie || cookie.Name == httpsSessionCookie) && cookie.Value != ""
 }
 
 func login(t *testing.T, handler http.Handler) *http.Cookie {
@@ -294,7 +298,7 @@ func TestLoginRejectsTheWrongPassword(t *testing.T) {
 		t.Fatalf("a wrong password returned %d, want 401", recorder.Code)
 	}
 	for _, cookie := range recorder.Result().Cookies() {
-		if cookie.Name == sessionCookieName && cookie.Value != "" {
+		if isSessionCookie(cookie) {
 			t.Fatal("a failed login handed out a session cookie")
 		}
 	}

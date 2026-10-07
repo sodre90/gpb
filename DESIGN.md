@@ -1388,6 +1388,13 @@ Verification cost (tens of ms, 64 MiB) is irrelevant at one login per weeks.
   withholds the cookie on cross-site POSTs. **`Secure` follows `web.tls`**: set when encryption
   is on, and not before — a `Secure` cookie on a plain-HTTP install is one the browser never
   sends back, which is a locked-out user rather than a safer one.
+- **One cookie name per scheme:** `__Host-gpb_session` over https, `gpb_http_session` over
+  http. A browser will not let a plain-HTTP page replace a `Secure` cookie of the same name,
+  so while both used `gpb_session`, turning encryption off locked out every browser that had
+  signed in over https: the right password was accepted, the new cookie thrown away, and the
+  next page was the login page again — for as long as the old cookie's 30 days ran. The
+  `__Host-` prefix also has the browser accept the https cookie only from this host, for the
+  whole site. Changed 2026-10-07.
 - Expiry: 30-day idle TTL (sliding), 90-day absolute. Token rotated on every successful
   login; logout deletes server-side.
 

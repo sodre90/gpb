@@ -11,7 +11,7 @@ import (
 )
 
 func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
-	if cookie, err := r.Cookie(sessionCookieName); err == nil && s.sessions.touch(cookie.Value) {
+	if cookie, err := r.Cookie(s.sessionCookieName()); err == nil && s.sessions.touch(cookie.Value) {
 		http.Redirect(w, r, safeNext(r.URL.Query().Get("next")), http.StatusSeeOther)
 		return
 	}
@@ -109,7 +109,7 @@ func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int,
 // half of what TLS is for — a bearer token that never leaves an encrypted connection.
 func (s *Server) setSessionCookie(w http.ResponseWriter, id string, idleTTL time.Duration) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
+		Name:     s.sessionCookieName(),
 		Value:    id,
 		Path:     "/",
 		HttpOnly: true,
@@ -121,7 +121,7 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, id string, idleTTL time
 
 func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
+		Name:     s.sessionCookieName(),
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
@@ -129,6 +129,13 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
+}
+
+func (s *Server) sessionCookieName() string {
+	if s.cfg.Web.TLS.Enabled() {
+		return httpsSessionCookie
+	}
+	return httpSessionCookie
 }
 
 // safeNext keeps post-login redirects on this origin: anything that is not a plain

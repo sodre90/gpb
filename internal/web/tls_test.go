@@ -238,3 +238,26 @@ func TestTheSessionCookieIsSecureOnlyWhenTheConnectionIs(t *testing.T) {
 		}
 	}
 }
+
+// A browser will not let a page served over http replace a Secure cookie of the same name. With
+// one name for both, a UI moved from https to http took the right password and sent the user back
+// to the login page, for as long as the cookie from the https days lived.
+func TestASessionFromTheHTTPSDaysCannotStandInTheWayOfAnHTTPOne(t *testing.T) {
+	server, _ := testServer(t)
+	server.cfg.Web.TLS = config.TLS{Mode: config.TLSSelfSigned}
+	overHTTPS := login(t, server.Handler())
+
+	server.cfg.Web.TLS = config.TLS{Mode: config.TLSOff}
+	overHTTP := login(t, server.Handler())
+
+	if overHTTPS.Name == overHTTP.Name {
+		t.Fatalf("both schemes name the session cookie %q", overHTTP.Name)
+	}
+	if !strings.HasPrefix(overHTTPS.Name, "__Host-") || overHTTPS.Path != "/" || overHTTPS.Domain != "" {
+		t.Errorf("the https cookie is %q for path %q and domain %q, which a browser would not hold to this host alone",
+			overHTTPS.Name, overHTTPS.Path, overHTTPS.Domain)
+	}
+	if recorder := get(server.Handler(), "/", overHTTP); recorder.Code != http.StatusOK {
+		t.Errorf("the session signed in over http was answered %d", recorder.Code)
+	}
+}
