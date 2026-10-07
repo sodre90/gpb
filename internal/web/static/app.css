@@ -280,6 +280,14 @@ input[type="password"] {
   color: inherit;
 }
 
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+input[type="checkbox"]:focus-visible {
+  outline-offset: 1px;
+}
+
 input[type="password"] {
   display: block;
   width: 100%;
@@ -889,10 +897,14 @@ details.diagnostics summary {
   min-width: 12rem;
 }
 
-.library-form-walk {
-  flex-basis: 100%;
+.library-form-walk,
+.library-form-weekly {
   display: grid;
   gap: var(--s-1);
+}
+
+.library-form-walk {
+  flex-basis: 100%;
 }
 
 .library-form-walk p {
@@ -902,11 +914,23 @@ details.diagnostics summary {
 .library-form-walk label {
   display: flex;
   gap: var(--s-2);
-  align-items: baseline;
+  align-items: start;
+}
+
+.library-form-walk input {
+  font: inherit;
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  margin: calc((1lh - 1rem) / 2) 0 0;
 }
 
 .library-form-weekly {
-  margin-left: var(--s-5);
+  margin-left: calc(1rem + var(--s-2));
+}
+
+.library-form-walk:has([name="new_only"]:not(:checked)) .library-form-weekly {
+  opacity: 0.5;
 }
 
 .crumbs {

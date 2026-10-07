@@ -112,11 +112,13 @@
     <div class="library-form-walk">
       <label><input type="checkbox" name="new_only" value="1"{{if .NewOnly}} checked{{end}}>
         Each night, look only for what is new</label>
-      <label class="library-form-weekly"><input type="checkbox" name="weekly_full_walk" value="1"{{if .WeeklyFullWalk}} checked{{end}}>
-        and walk the whole library once a week</label>
-      <p class="small muted">A nightly walk stops at the first page of photos it already has. The
-        weekly one is what finds a photo uploaded with an old date, and notices one deleted from
-        further back.</p>
+      <div class="library-form-weekly">
+        <label><input type="checkbox" name="weekly_full_walk" value="1"{{if .WeeklyFullWalk}} checked{{end}}>
+          Still walk the whole library once a week</label>
+        <p class="small muted">A nightly walk stops at the first page of photos it already has. The
+          weekly one is what finds a photo uploaded with an old date, and notices one deleted from
+          further back.</p>
+      </div>
     </div>
     <button type="submit">Save</button>
   </form>

@@ -94,3 +94,52 @@ func TestTheAlbumsPageStarsARowAndGoesOnFindingIt(t *testing.T) {
 		t.Errorf("the reloaded list reads %v, want the starred album at the top of it", order)
 	}
 }
+
+// The weekly walk is a qualification of the box above it, and reads as one only when it starts
+// where that box's words do and fades while that box is off. Both are layout, which the HTML
+// alone cannot show. It fades rather than being disabled: a disabled box is left out of the form,
+// and saving with the nightly box off would quietly turn the weekly walk off with it.
+func TestTheAlbumsPageHangsTheWeeklyWalkUnderTheBoxItQualifies(t *testing.T) {
+	if os.Getenv("GPB_BROWSER") == "" {
+		t.Skip("set GPB_BROWSER=1 to drive a real browser")
+	}
+
+	server, _ := testServer(t)
+	site := httptest.NewServer(server.Handler())
+	defer site.Close()
+
+	browser, done := openBrowser(t)
+	defer done()
+	logIn(t, browser, site.URL)
+
+	const offsetFromTheNightlyBoxsWords = `(() => {
+		const nightly = document.querySelector('input[name="new_only"]');
+		const words = document.createRange();
+		words.selectNodeContents(nightly.nextSibling);
+		const weekly = document.querySelector('input[name="weekly_full_walk"]');
+		return weekly.getBoundingClientRect().left - words.getBoundingClientRect().left;
+	})()`
+	const weeklyOpacity = `Number(getComputedStyle(document.querySelector('.library-form-weekly')).opacity)`
+
+	var offset, whileOff, whileOn float64
+	if err := chromedp.Run(browser,
+		chromedp.Navigate(site.URL+"/albums"),
+		chromedp.WaitVisible(`input[name="new_only"]`, chromedp.ByQuery),
+		chromedp.Evaluate(offsetFromTheNightlyBoxsWords, &offset),
+		chromedp.Evaluate(weeklyOpacity, &whileOff),
+		chromedp.Click(`input[name="new_only"]`, chromedp.ByQuery),
+		chromedp.Evaluate(weeklyOpacity, &whileOn),
+	); err != nil {
+		t.Fatalf("measuring the library form: %v", err)
+	}
+
+	if offset < -1 || offset > 1 {
+		t.Errorf("the weekly box starts %.1fpx from the words of the box it qualifies", offset)
+	}
+	if whileOff >= 1 {
+		t.Error("the weekly walk is drawn at full strength while the nightly box it qualifies is off")
+	}
+	if whileOn != 1 {
+		t.Errorf("with the nightly box ticked the weekly walk is still faded, at opacity %v", whileOn)
+	}
+}
