@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 — 2026-10-07
+
+- **The library's two walk boxes read as one setting.** The weekly walk now sits under the box it
+  qualifies, lined up with its words, says "Still walk the whole library once a week", and fades
+  while that box is off. Checkboxes take the page's accent colour, and the keyboard focus ring
+  sits closer around them.
+
 ## 0.5.0 — 2026-10-07
 
 - **A nightly run no longer rewrites the library to say nothing has changed.** Every walk wrote
