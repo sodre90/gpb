@@ -176,6 +176,12 @@ a {
   font-size: var(--t-body);
 }
 
+.topbar-version {
+  font-weight: 400;
+  font-size: var(--t-caption);
+  color: var(--muted);
+}
+
 .topbar form {
   margin-left: auto;
 }

@@ -11,6 +11,7 @@ import (
 
 	"gpb/internal/auth"
 	"gpb/internal/store"
+	"gpb/internal/version"
 )
 
 //go:embed templates static
@@ -133,6 +134,7 @@ func (s *Server) lastOutcome() store.Outcome {
 var helpers = template.FuncMap{
 	"count":    humanCount,
 	"quantity": quantity,
+	"version":  func() string { return version.Current },
 }
 
 // parsePages gives every page the layout and the shared components, so a block used on two

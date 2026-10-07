@@ -15,6 +15,7 @@ import (
 	"gpb/internal/auth"
 	"gpb/internal/store"
 	"gpb/internal/syncer"
+	"gpb/internal/version"
 )
 
 func TestOnlyWhatMovedIsAnnounced(t *testing.T) {
@@ -215,6 +216,26 @@ func TestTheNavFragmentKnowsWhichPageItIsOn(t *testing.T) {
 	}
 	if !strings.Contains(fragment, `data-live-src="/live/nav?on=%2Falbums"`) {
 		t.Errorf("the nav fragment stops being a region after one swap; markup was:\n%s", fragment)
+	}
+}
+
+// Which release is answering is the first question after an upgrade, and the nav is on every
+// page. The copy that replaces it has to keep it too, or the version would vanish on the first
+// swap. The login page leaves it out: there it would tell a stranger which known bugs to try.
+func TestTheNavSaysWhichReleaseIsRunningOnceSignedIn(t *testing.T) {
+	server, _ := testServer(t)
+	handler := server.Handler()
+	release := `<span class="topbar-version">` + version.Current + `</span>`
+
+	if signedOut := get(handler, "/login", nil).Body.String(); strings.Contains(signedOut, version.Current) {
+		t.Errorf("the login page names the release; markup was:\n%s", signedOut)
+	}
+
+	cookie := login(t, handler)
+	for _, path := range []string{"/albums", "/live/nav?on=%2Falbums"} {
+		if body := get(handler, path, cookie).Body.String(); !strings.Contains(body, release) {
+			t.Errorf("%s does not name release %s in the nav; markup was:\n%s", path, version.Current, body)
+		}
 	}
 }
 

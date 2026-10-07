@@ -12,7 +12,7 @@
 {{block "navbar" .}}
 <header class="topbar" id="live-nav" data-live="review" data-live-src="{{.NavSrc}}">
   <nav aria-label="Main">
-    <span class="topbar-brand">gpb</span>
+    <span class="topbar-brand">gpb <span class="topbar-version">{{version}}</span></span>
     {{range .Nav}}<a href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}
       {{with .Waiting}}aria-label="Review, {{.}} waiting"{{end}}>{{.Label}}{{with .Waiting}}
       <span class="topbar-count" aria-hidden="true">{{.}}</span>{{end}}</a>
