@@ -309,6 +309,61 @@ func TestDecodeDownloadURL(t *testing.T) {
 	if !ok || !strings.HasPrefix(signed, "https://") {
 		t.Fatalf("the signed URL decoded as %q", signed)
 	}
+
+	signed, declined, err := decodeDownloadURL(loadFixture(t, "download-url.json"))
+	if err != nil || declined || !strings.HasPrefix(signed, "https://") {
+		t.Fatalf("decodeDownloadURL gave %q, declined %v, %v", signed, declined, err)
+	}
+}
+
+func decodeJSON(t *testing.T, raw string) any {
+	t.Helper()
+	var payload any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatalf("%s is not JSON: %v", raw, err)
+	}
+	return payload
+}
+
+// VrseUb answers a video added since 2026-10-12 in full but for the URL, and that one shape
+// sends the download to pLFTfd. Every other surprise stays drift: falling back on it would
+// hide the next protocol change behind a second RPC that might happen to answer.
+func TestVrseUbDeclinesOnlyOnAnEmptyURLSlot(t *testing.T) {
+	cases := map[string]struct {
+		payload      string
+		wantDeclined bool
+	}{
+		"a video's answer, skeleton as measured": {`[[1,2],null,[3],[4],{"1":true}]`, true},
+		"a number where the URL belongs":         {`[[1,2],42,[3]]`, false},
+		"a URL that is not https":                {`[[1,2],"http://video-downloads.googleusercontent.com/x"]`, false},
+		"an answer cut short before the URL":     {`[[1,2]]`, false},
+		"no array at all":                        {`{"1":null}`, false},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, declined, err := decodeDownloadURL(decodeJSON(t, tc.payload))
+			if declined != tc.wantDeclined {
+				t.Fatalf("declined = %v, want %v", declined, tc.wantDeclined)
+			}
+			if !tc.wantDeclined && !errors.Is(err, ErrProtocolDrift) {
+				t.Fatalf("got %v, want protocol drift", err)
+			}
+		})
+	}
+}
+
+func TestDecodeVideoDownloadURL(t *testing.T) {
+	answer := decodeJSON(t, `["https://video-downloads.googleusercontent.com/ADGPM2k"]`)
+	signed, err := signedURLAt(rootOf(answer, videoDownloadURLRPC).at(videoDownloadURLIndex))
+	if err != nil || signed != "https://video-downloads.googleusercontent.com/ADGPM2k" {
+		t.Fatalf("pLFTfd decoded as %q, %v", signed, err)
+	}
+
+	_, err = signedURLAt(rootOf(decodeJSON(t, `[null]`), videoDownloadURLRPC).at(videoDownloadURLIndex))
+	if !errors.Is(err, ErrProtocolDrift) || !strings.Contains(err.Error(), "pLFTfd[0]") {
+		t.Fatalf("an empty pLFTfd answer gave %v, want drift naming pLFTfd[0]", err)
+	}
 }
 
 // The session is the account's credentials. It goes to the one content host that refuses the
