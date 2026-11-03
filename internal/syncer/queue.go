@@ -87,7 +87,7 @@ func (s *Syncer) download(ctx context.Context, backlog []store.MediaItem,
 					breaker.Succeed()
 					continue
 				}
-				if repeatsItsRecordedDrift(item, err) {
+				if tellsTheBreakerNothing(item, err) {
 					continue
 				}
 				if breaker.Fail(err) {

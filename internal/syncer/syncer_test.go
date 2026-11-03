@@ -569,6 +569,34 @@ func TestDriftOnItemsWithNoHistoryStillTripsTheBreaker(t *testing.T) {
 	}
 }
 
+// Unfollowing a big album while a run is fetching it leaves the rest of its queued items with no
+// followed album to be fetched for. Each is skipped before any request is made, so it says
+// nothing about the server — eight of them in a row used to end the run as an error.
+func TestItemsSkippedMidRunDoNotTripTheBreaker(t *testing.T) {
+	bodies := map[string]string{}
+	for index := range 12 {
+		bodies[fmt.Sprintf("key-%02d", index)] = "bytes"
+	}
+	h := newHarness(t, store.SyncAll, bodies)
+	h.syncer.options.Workers = 1
+	var unfollow sync.Once
+	h.source.onDownload = func() {
+		unfollow.Do(func() {
+			if err := h.store.SetAlbumSyncMode("album-1", store.SyncNone); err != nil {
+				t.Errorf("unfollowing the album mid-run: %v", err)
+			}
+		})
+	}
+
+	report, err := h.syncer.Run(t.Context())
+	if err != nil {
+		t.Fatalf("skipping the rest of an unfollowed album stopped the run: %v", err)
+	}
+	if report.Skipped == 0 || report.Failed != 0 {
+		t.Errorf("the run skipped %d and failed %d, want skips and no failures", report.Skipped, report.Failed)
+	}
+}
+
 func TestUnfollowedAlbumsAreListedButNotDownloaded(t *testing.T) {
 	h := newHarness(t, store.SyncNone, map[string]string{"key-a": "bytes"})
 

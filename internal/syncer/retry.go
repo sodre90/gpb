@@ -69,11 +69,18 @@ func retryAfterOf(err error) time.Duration {
 	return 0
 }
 
+// tellsTheBreakerNothing is an outcome that is evidence about neither a working server nor a
+// broken one, so the breaker neither counts it nor resets on it: an item skipped because no
+// followed album holds it any more, which is decided before any request is made, and an item
+// failing exactly as it failed last time.
+func tellsTheBreakerNothing(item store.MediaItem, err error) bool {
+	return errors.Is(err, errNoFollowedAlbum) || repeatsItsRecordedDrift(item, err)
+}
+
 // repeatsItsRecordedDrift is a failure that is evidence about one item and none about the far
-// end: the protocol drift this item already failed with last time, word for word. The breaker
-// neither counts it nor resets on it. Anything else still counts, a 503 on a known-bad item
-// included, and so does drift on an item with no history, which is what a change on Google's
-// side looks like.
+// end: the protocol drift this item already failed with last time, word for word. Anything else
+// still counts, a 503 on a known-bad item included, and so does drift on an item with no
+// history, which is what a change on Google's side looks like.
 func repeatsItsRecordedDrift(item store.MediaItem, err error) bool {
 	return errors.Is(err, gphotos.ErrProtocolDrift) && err.Error() == item.LastError
 }
