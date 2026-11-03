@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.4 — 2026-11-03
+
+- **A few items that keep failing the same way no longer cancel the whole night.** From late
+  October a dozen videos Google would not hand out a link for came back first every night, and
+  eight of them failing in a row tripped the safety stop meant for a broken server, so for four
+  nights nothing was listed and nothing was backed up. An item failing exactly as it failed last
+  time now says something only about that item, and the run carries on past it. A failure on an
+  item with no history still counts, so a real change on Google's side still stops the run.
+
 ## 0.5.3 — 2026-11-03
 
 - **New videos back up again.** From mid-October Google stopped handing out a download link for
