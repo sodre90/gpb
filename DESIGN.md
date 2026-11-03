@@ -1748,10 +1748,12 @@ a network filesystem — local disk.)*
    second RPC that happened to answer. Migration 0020 offers again the items written off with
    exactly this error, since nothing else ever would.
 
-   Not yet measured: whether `pLFTfd` needs an album id for an item reached only through an
-   album someone else owns, as `VrseUb` does. Such videos are among the ones `VrseUb` declines,
-   with a longer answer — 14 slots instead of 5 — and `pLFTfd` is asked about them without an
-   album, because the captured request carried none.
+   **Measured 2026-11-03 — `pLFTfd` needs no album id.** Videos reached only through an album
+   someone else owns get the longer `VrseUb` answer — 14 slots instead of 5 — and `pLFTfd` is
+   asked about them without an album, because the captured request carried none. On the first
+   run after the fix, all three such videos on one account downloaded that way, along with the
+   seventeen library videos stuck before it, every file the length the content host
+   advertised. `VrseUb` still wants the album; `pLFTfd` does not.
 2. (?) **Thumbnail URL auth — partially answered, and worse than assumed.** Phase 0 found
    thumbnails live on `photos.fife.usercontent.google.com`, which rejects the app host's
    session cookies: anonymous gets 403, and the full captured cookie set gets redirected
