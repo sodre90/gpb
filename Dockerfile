@@ -1,6 +1,6 @@
 # Pinned to the patch release go.mod asks for, so a cached builder image cannot bring back a
 # standard-library fix the floor was raised for (DESIGN.md §15).
-FROM golang:1.26.6-bookworm AS build
+FROM golang:1.26.10-bookworm AS build
 
 WORKDIR /src
 COPY go.mod go.sum ./
