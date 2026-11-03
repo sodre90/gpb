@@ -18,15 +18,15 @@ const downloadURLRPC = "VrseUb"
 // downloadURLIndex is where the minted signed URL sits in the VrseUb answer.
 const downloadURLIndex = 1
 
-// videoDownloadURLRPC is what the website's Download command calls for a video VrseUb leaves
-// without a URL. Measured 2026-11-02: every video added since 2026-10-12 came back from VrseUb
+// fallbackDownloadURLRPC is what the website's Download command calls for an item VrseUb leaves
+// without a URL. Measured 2026-11-02: videos added from mid-October 2026 came back from VrseUb
 // with nothing at [1] and the rest of its answer intact, while pLFTfd with [[mediaKey]]
 // answered [signedURL] on video-downloads — and for an older video, a file of the same byte
 // count VrseUb had served for it.
-const videoDownloadURLRPC = "pLFTfd"
+const fallbackDownloadURLRPC = "pLFTfd"
 
-// videoDownloadURLIndex is where the signed URL sits in the pLFTfd answer.
-const videoDownloadURLIndex = 0
+// fallbackDownloadURLIndex is where the signed URL sits in the pLFTfd answer.
+const fallbackDownloadURLIndex = 0
 
 // downloadTimeout has to cover a half-gigabyte video on a domestic uplink, which the Phase 0
 // spike measured at 522 MB for a single clip.
@@ -92,30 +92,38 @@ func (c *Client) DownloadURL(ctx context.Context, mediaKey, albumID string) (str
 
 	signed, declined, err := decodeDownloadURL(payload)
 	if declined {
-		return c.videoDownloadURL(ctx, mediaKey)
+		return c.fallbackDownloadURL(ctx, mediaKey)
 	}
 	return signed, err
 }
 
-// videoDownloadURL asks pLFTfd for the URL VrseUb declined to mint.
-func (c *Client) videoDownloadURL(ctx context.Context, mediaKey string) (string, error) {
-	payload, err := c.call(ctx, videoDownloadURLRPC, []any{[]any{mediaKey}}, "/photo/"+mediaKey)
+// fallbackDownloadURL asks pLFTfd for the URL VrseUb declined to mint.
+func (c *Client) fallbackDownloadURL(ctx context.Context, mediaKey string) (string, error) {
+	payload, err := c.call(ctx, fallbackDownloadURLRPC, []any{[]any{mediaKey}}, "/photo/"+mediaKey)
 	if err != nil {
-		return "", fmt.Errorf("VrseUb minted no URL, and asking %s for one failed: %w", videoDownloadURLRPC, err)
+		return "", fmt.Errorf("VrseUb minted no URL, and asking %s for one failed: %w", fallbackDownloadURLRPC, err)
 	}
-	return signedURLAt(rootOf(payload, videoDownloadURLRPC).at(videoDownloadURLIndex))
+	return signedURLAt(rootOf(payload, fallbackDownloadURLRPC).at(fallbackDownloadURLIndex))
 }
 
-// decodeDownloadURL reads VrseUb's answer. Declined means the answer reached the URL slot and
-// held null there, which is how VrseUb answers the videos pLFTfd serves; any other unexpected
-// answer is still drift, not a cue to try elsewhere.
+// decodeDownloadURL reads VrseUb's answer. Declined is the one shape that sends a download to
+// pLFTfd; any other unexpected answer is still drift, not a cue to try elsewhere.
 func decodeDownloadURL(payload any) (signed string, declined bool, err error) {
-	slot := rootOf(payload, downloadURLRPC).at(downloadURLIndex)
-	if answer, ok := payload.([]any); ok && len(answer) > downloadURLIndex && !slot.present() {
+	root := rootOf(payload, downloadURLRPC)
+	if answeredInFullButForTheURL(root) {
 		return "", true, nil
 	}
-	signed, err = signedURLAt(slot)
+	signed, err = signedURLAt(root.at(downloadURLIndex))
 	return signed, false, err
+}
+
+// answeredInFullButForTheURL is how VrseUb answers the items pLFTfd serves: the item's record
+// at [0], the answer reaching the URL slot, and null in it. An answer collapsed to nulls has
+// no record and stays drift.
+func answeredInFullButForTheURL(root tree) bool {
+	answer, isArray := root.list()
+	_, hasRecord := root.at(0).list()
+	return isArray && hasRecord && len(answer) > downloadURLIndex && !root.at(downloadURLIndex).present()
 }
 
 func signedURLAt(slot tree) (string, error) {

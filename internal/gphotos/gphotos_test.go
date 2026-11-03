@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -325,19 +326,22 @@ func decodeJSON(t *testing.T, raw string) any {
 	return payload
 }
 
-// VrseUb answers a video added since 2026-10-12 in full but for the URL, and that one shape
-// sends the download to pLFTfd. Every other surprise stays drift: falling back on it would
-// hide the next protocol change behind a second RPC that might happen to answer.
+// VrseUb answers a video added from mid-October 2026 in full but for the URL, and that one
+// shape sends the download to pLFTfd. Every other surprise stays drift: falling back on it
+// would hide the next protocol change behind a second RPC that might happen to answer.
 func TestVrseUbDeclinesOnlyOnAnEmptyURLSlot(t *testing.T) {
 	cases := map[string]struct {
 		payload      string
 		wantDeclined bool
 	}{
 		"a video's answer, skeleton as measured": {`[[1,2],null,[3],[4],{"1":true}]`, true},
-		"a number where the URL belongs":         {`[[1,2],42,[3]]`, false},
-		"a URL that is not https":                {`[[1,2],"http://video-downloads.googleusercontent.com/x"]`, false},
-		"an answer cut short before the URL":     {`[[1,2]]`, false},
-		"no array at all":                        {`{"1":null}`, false},
+		"a video in someone else's album, skeleton as measured": {
+			`[[1,2],null,[3],[4],true,null,null,null,null,false,"s",null,"s",{"1":1,"2":2}]`, true},
+		"an answer collapsed to nulls":       {`[null,null]`, false},
+		"a number where the URL belongs":     {`[[1,2],42,[3]]`, false},
+		"a URL that is not https":            {`[[1,2],"http://video-downloads.googleusercontent.com/x"]`, false},
+		"an answer cut short before the URL": {`[[1,2]]`, false},
+		"no array at all":                    {`{"1":null}`, false},
 	}
 
 	for name, tc := range cases {
@@ -353,16 +357,107 @@ func TestVrseUbDeclinesOnlyOnAnEmptyURLSlot(t *testing.T) {
 	}
 }
 
-func TestDecodeVideoDownloadURL(t *testing.T) {
+func TestDecodeFallbackDownloadURL(t *testing.T) {
 	answer := decodeJSON(t, `["https://video-downloads.googleusercontent.com/ADGPM2k"]`)
-	signed, err := signedURLAt(rootOf(answer, videoDownloadURLRPC).at(videoDownloadURLIndex))
+	signed, err := signedURLAt(rootOf(answer, fallbackDownloadURLRPC).at(fallbackDownloadURLIndex))
 	if err != nil || signed != "https://video-downloads.googleusercontent.com/ADGPM2k" {
 		t.Fatalf("pLFTfd decoded as %q, %v", signed, err)
 	}
 
-	_, err = signedURLAt(rootOf(decodeJSON(t, `[null]`), videoDownloadURLRPC).at(videoDownloadURLIndex))
+	_, err = signedURLAt(rootOf(decodeJSON(t, `[null]`), fallbackDownloadURLRPC).at(fallbackDownloadURLIndex))
 	if !errors.Is(err, ErrProtocolDrift) || !strings.Contains(err.Error(), "pLFTfd[0]") {
 		t.Fatalf("an empty pLFTfd answer gave %v, want drift naming pLFTfd[0]", err)
+	}
+}
+
+// scriptedRPCs answers each batchexecute call with the response scripted for its rpcid and
+// records what was asked, so a test can see the whole conversation DownloadURL has.
+type scriptedRPCs struct {
+	answers map[string]func() *http.Response
+	asked   *[]string
+}
+
+func (s scriptedRPCs) RoundTrip(request *http.Request) (*http.Response, error) {
+	rpcID := request.URL.Query().Get("rpcids")
+	body, err := io.ReadAll(request.Body)
+	if err != nil {
+		return nil, err
+	}
+	form, err := url.ParseQuery(string(body))
+	if err != nil {
+		return nil, err
+	}
+	*s.asked = append(*s.asked, rpcID+" "+form.Get("f.req"))
+
+	response := s.answers[rpcID]()
+	response.Request = request
+	return response, nil
+}
+
+func batchexecuteAnswer(rpcID, payload string) func() *http.Response {
+	return func() *http.Response {
+		frame, _ := json.Marshal([]any{[]any{"wrb.fr", rpcID, payload, nil, nil, nil, "generic"}})
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{},
+			Body: io.NopCloser(strings.NewReader(")]}'\n\n" + string(frame)))}
+	}
+}
+
+func bareStatus(code int) func() *http.Response {
+	return func() *http.Response {
+		return &http.Response{StatusCode: code, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}
+	}
+}
+
+// The decoders above decide; this checks the decision is acted on: a declined VrseUb answer
+// becomes a second call, and the second call's failures keep the class the retry policy reads.
+func TestDownloadURLAsksPLFTfdWhenVrseUbDeclines(t *testing.T) {
+	declined := batchexecuteAnswer(downloadURLRPC, `[[1,2],null,[3],[4],{"1":true}]`)
+	signedURL := "https://video-downloads.googleusercontent.com/ADGPM2k"
+
+	cases := map[string]struct {
+		fallback func() *http.Response
+		check    func(t *testing.T, signed string, err error)
+	}{
+		"pLFTfd mints the URL": {batchexecuteAnswer(fallbackDownloadURLRPC, `["`+signedURL+`"]`),
+			func(t *testing.T, signed string, err error) {
+				if err != nil || signed != signedURL {
+					t.Fatalf("got %q, %v", signed, err)
+				}
+			}},
+		"pLFTfd is briefly unavailable": {bareStatus(http.StatusServiceUnavailable),
+			func(t *testing.T, _ string, err error) {
+				var httpErr *HTTPError
+				if !errors.As(err, &httpErr) || !httpErr.Retryable() {
+					t.Fatalf("got %v, want a retryable HTTP error", err)
+				}
+			}},
+		"pLFTfd refuses the session": {bareStatus(http.StatusForbidden),
+			func(t *testing.T, _ string, err error) {
+				if !errors.Is(err, ErrSessionRejected) {
+					t.Fatalf("got %v, want the session rejected", err)
+				}
+			}},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			var asked []string
+			client := &Client{token: "token", http: &http.Client{Transport: scriptedRPCs{
+				answers: map[string]func() *http.Response{downloadURLRPC: declined, fallbackDownloadURLRPC: tc.fallback},
+				asked:   &asked,
+			}}}
+
+			signed, err := client.DownloadURL(context.Background(), "KEY", "ALBUM")
+			tc.check(t, signed, err)
+
+			want := []string{
+				`VrseUb [[["VrseUb","[\"KEY\",null,null,null,\"ALBUM\"]",null,"generic"]]]`,
+				`pLFTfd [[["pLFTfd","[[\"KEY\"]]",null,"generic"]]]`,
+			}
+			if strings.Join(asked, "\n") != strings.Join(want, "\n") {
+				t.Fatalf("asked\n%s\nwant\n%s", strings.Join(asked, "\n"), strings.Join(want, "\n"))
+			}
+		})
 	}
 }
 
