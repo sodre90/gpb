@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.3 — 2026-11-03
+
+- **New videos back up again.** From mid-October Google stopped handing out a download link for
+  newly added videos through the call gpb used, so every one of them failed, each night's run
+  ended partial, and after five tries the videos were written off. gpb now asks the call the
+  Photos website's own Download button uses, and only when the first one answered in full but
+  for the link; any other surprise is still reported as Google having changed something.
+  Contributed by Mihaly Laszlo Molnar.
+- **The videos already written off are tried again.** The upgrade puts every item that failed
+  for exactly that reason back in line for the next run, with its failure count cleared. A video
+  reachable only through an album someone else owns may still fail: whether the new call needs
+  that album's name has not been measured yet.
+- **Built with Go 1.26.10**, for fourteen standard-library fixes gpb's own code reaches, eight of
+  them in the HTTP stack it serves its pages and talks to Google with.
+
 ## 0.5.2 — 2026-10-07
 
 - **The top bar says which release is running**, beside the gpb name, on every page once you are
