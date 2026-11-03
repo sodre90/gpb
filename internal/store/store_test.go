@@ -976,6 +976,47 @@ func TestRunsCutOffByARestartAreReclassifiedRatherThanLeftAsFailures(t *testing.
 	}
 }
 
+// The rows that made this migration necessary are on the box: videos written off because
+// VrseUb minted them no URL, which pLFTfd now does. Only that failure starts over; an item
+// written off for anything else stays where the failure limit put it.
+func TestVideosWrittenOffForAnUnmintedURLAreOfferedAgain(t *testing.T) {
+	store := openTestStore(t)
+	seedFollowedAlbum(t, store, SyncAll, "unminted", "broken")
+
+	causes := map[string]string{
+		"unminted": "google photos response did not match the expected shape: wanted a signed download URL at VrseUb[1], found nothing — the payload is [[…16],null,[…12],[…18],{…3}]",
+		"broken":   "google photos response did not match the expected shape: no VrseUb frame in a response carrying VrseUb",
+	}
+	for key, cause := range causes {
+		for range 5 {
+			if err := store.MarkFailed(key, errors.New(cause)); err != nil {
+				t.Fatalf("marking %s failed: %v", key, err)
+			}
+		}
+	}
+
+	// The migration itself rather than a copy of it: a fresh store has already run it, and the
+	// rows it exists for only appear afterwards in a test.
+	retry, err := migrations.ReadFile("migrations/0020_retry_vrseub_declines.sql")
+	if err != nil {
+		t.Fatalf("reading the migration: %v", err)
+	}
+	if _, err := store.db.Exec(string(retry)); err != nil {
+		t.Fatalf("applying the migration: %v", err)
+	}
+
+	pending, err := store.Pending(5, 100)
+	if err != nil {
+		t.Fatalf("querying pending work: %v", err)
+	}
+	if len(pending) != 1 || pending[0].MediaKey != "unminted" {
+		t.Fatalf("offered %+v, want only the item VrseUb minted no URL for", pending)
+	}
+	if pending[0].LastError != causes["unminted"] {
+		t.Errorf("the migration rewrote the last error to %q", pending[0].LastError)
+	}
+}
+
 // The renewal is a single statement on purpose: a session that expires between an "is it live"
 // query and the write that slides it would be renewed after its own death.
 func TestOnlyALiveSessionIsRenewed(t *testing.T) {
