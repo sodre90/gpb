@@ -18,6 +18,16 @@ const downloadURLRPC = "VrseUb"
 // downloadURLIndex is where the minted signed URL sits in the VrseUb answer.
 const downloadURLIndex = 1
 
+// videoDownloadURLRPC is what the website's Download command calls for a video VrseUb leaves
+// without a URL. Measured 2026-11-02: every video added since 2026-10-12 came back from VrseUb
+// with nothing at [1] and the rest of its answer intact, while pLFTfd with [[mediaKey]]
+// answered [signedURL] on video-downloads — and for an older video, a file of the same byte
+// count VrseUb had served for it.
+const videoDownloadURLRPC = "pLFTfd"
+
+// videoDownloadURLIndex is where the signed URL sits in the pLFTfd answer.
+const videoDownloadURLIndex = 0
+
 // downloadTimeout has to cover a half-gigabyte video on a domestic uplink, which the Phase 0
 // spike measured at 522 MB for a single clip.
 const downloadTimeout = 2 * time.Hour
@@ -35,13 +45,13 @@ var ErrSignedURLRejected = errors.New("the content host rejected the signed down
 // the usual cause is a dropped connection, and the partial file can be resumed.
 var ErrTruncated = errors.New("the download ended before the advertised length")
 
-// ErrUnknownContentHost means VrseUb minted a URL somewhere this client does not recognise.
+// ErrUnknownContentHost means Google minted a URL somewhere this client does not recognise.
 // It is fatal rather than best-effort: an unrecognised host is either protocol drift or a
 // redirect, and the client must not decide on the fly whether to hand it the session.
 var ErrUnknownContentHost = errors.New("google minted a download URL on an unrecognised host")
 
-// contentHosts maps each host VrseUb mints download URLs on to whether it demands the Google
-// session on top of the URL's own signature.
+// contentHosts maps each host VrseUb and pLFTfd mint download URLs on to whether it demands
+// the Google session on top of the URL's own signature.
 //
 // Both hosts serve the camera's untouched file — measured 2026-08-10 across 22 items, every
 // one arriving at its advertised resolution with an attachment disposition, the fife files
@@ -80,12 +90,39 @@ func (c *Client) DownloadURL(ctx context.Context, mediaKey, albumID string) (str
 		return "", err
 	}
 
-	root := rootOf(payload, downloadURLRPC)
-	signed, ok := root.at(downloadURLIndex).text()
-	if !ok || !strings.HasPrefix(signed, "https://") {
-		return "", root.at(downloadURLIndex).driftf("a signed download URL")
+	signed, declined, err := decodeDownloadURL(payload)
+	if declined {
+		return c.videoDownloadURL(ctx, mediaKey)
 	}
+	return signed, err
+}
 
+// videoDownloadURL asks pLFTfd for the URL VrseUb declined to mint.
+func (c *Client) videoDownloadURL(ctx context.Context, mediaKey string) (string, error) {
+	payload, err := c.call(ctx, videoDownloadURLRPC, []any{[]any{mediaKey}}, "/photo/"+mediaKey)
+	if err != nil {
+		return "", fmt.Errorf("VrseUb minted no URL, and asking %s for one failed: %w", videoDownloadURLRPC, err)
+	}
+	return signedURLAt(rootOf(payload, videoDownloadURLRPC).at(videoDownloadURLIndex))
+}
+
+// decodeDownloadURL reads VrseUb's answer. Declined means the answer reached the URL slot and
+// held null there, which is how VrseUb answers the videos pLFTfd serves; any other unexpected
+// answer is still drift, not a cue to try elsewhere.
+func decodeDownloadURL(payload any) (signed string, declined bool, err error) {
+	slot := rootOf(payload, downloadURLRPC).at(downloadURLIndex)
+	if answer, ok := payload.([]any); ok && len(answer) > downloadURLIndex && !slot.present() {
+		return "", true, nil
+	}
+	signed, err = signedURLAt(slot)
+	return signed, false, err
+}
+
+func signedURLAt(slot tree) (string, error) {
+	signed, ok := slot.text()
+	if !ok || !strings.HasPrefix(signed, "https://") {
+		return "", slot.driftf("a signed download URL")
+	}
 	return signed, nil
 }
 

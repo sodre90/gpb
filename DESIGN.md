@@ -1729,6 +1729,21 @@ a network filesystem — local disk.)*
    listing plus a surviving maker note. That is strong evidence of the original file, not a
    byte-for-byte proof against a known source — which this account cannot supply.
    `TestLiveEveryItemDownloadsAtFullResolution` re-checks it on demand.
+
+   **NEW, 2026-11-02 — `VrseUb` stopped minting for new videos; `pLFTfd` does.** Every video
+   added since 2026-10-12 (four of them on this account, none written to disk) came back
+   from `VrseUb` with `null` at `[1]` and the rest of its answer intact, so each run ended
+   `partial` and one item was written off after five tries. Photos from the same nights were
+   unaffected, and so were the 1,427 videos already held. The website's Download command
+   does not use `VrseUb` for these: a captured request shows `pLFTfd` with payload
+   `[[mediaKey]]`, answered `[signedURL]` on `video-downloads`. Replayed for an older video
+   gpb had already fetched through `VrseUb`, it served a file of the same 13,541,799 bytes.
+
+   `DownloadURL` calls `pLFTfd` only when `VrseUb` answers with an array that reaches the URL
+   slot and holds `null` there — for any item, though only videos have been seen to. Any other unexpected `VrseUb` answer is still drift: a fallback taken on
+   every surprise would hide the next protocol change behind a second RPC that happened to
+   answer. Not yet measured: whether `pLFTfd` needs an album id for an item reached only
+   through a shared album, as `VrseUb` does.
 2. (?) **Thumbnail URL auth — partially answered, and worse than assumed.** Phase 0 found
    thumbnails live on `photos.fife.usercontent.google.com`, which rejects the app host's
    session cookies: anonymous gets 403, and the full captured cookie set gets redirected
