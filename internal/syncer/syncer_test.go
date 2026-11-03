@@ -41,8 +41,11 @@ type fakeSource struct {
 	// question about skipping: one album Google answers strangely among many it answers well.
 	albumItemsErrs map[string]error
 
-	mu             sync.Mutex
-	failures       map[string]int
+	mu       sync.Mutex
+	failures map[string]int
+	// failWith fails a named item with the same error on every attempt, the way a decoder
+	// answers an item whose response shape it does not accept.
+	failWith       map[string]error
 	ignoreRange    map[string]bool
 	downloadCalls  int
 	timelineCalls  int
@@ -56,6 +59,7 @@ func newFakeSource() *fakeSource {
 		items:          map[string][]gphotos.MediaItem{},
 		bodies:         map[string][]byte{},
 		failures:       map[string]int{},
+		failWith:       map[string]error{},
 		ignoreRange:    map[string]bool{},
 		albumItemsErrs: map[string]error{},
 	}
@@ -122,6 +126,10 @@ func (f *fakeSource) DownloadOriginal(ctx context.Context, mediaKey, albumID str
 		f.failures[mediaKey] = remaining - 1
 		f.mu.Unlock()
 		return gphotos.Download{}, &gphotos.HTTPError{StatusCode: 503}
+	}
+	if err := f.failWith[mediaKey]; err != nil {
+		f.mu.Unlock()
+		return gphotos.Download{}, err
 	}
 	ignore := f.ignoreRange[mediaKey]
 	f.mu.Unlock()
@@ -498,6 +506,69 @@ func TestTheBreakerAbortsARunOfConsecutiveFailures(t *testing.T) {
 	}
 }
 
+var errNoURLMinted = fmt.Errorf("%w: wanted a signed download URL at VrseUb[1], found nothing",
+	gphotos.ErrProtocolDrift)
+
+// Measured 2026-10-25 to 10-28: a dozen videos Google would not mint a URL for came back first
+// every night as the backlog, eight of them failing in a row tripped the breaker, and the
+// cancelled run listed nothing and backed up nothing for four nights. An item failing exactly
+// as it failed last time says something about that item, not about Google.
+func TestItemsRepeatingTheirRecordedDriftDoNotStopTheRun(t *testing.T) {
+	bodies := map[string]string{}
+	for index := range 24 {
+		bodies[fmt.Sprintf("key-%02d", index)] = "bytes"
+	}
+	h := newHarness(t, store.SyncAll, bodies)
+	h.syncer.options.Workers = 1
+	var unminted []string
+	for index := 0; index < 24; index += 2 {
+		key := fmt.Sprintf("key-%02d", index)
+		unminted = append(unminted, key)
+		h.source.failWith[key] = errNoURLMinted
+	}
+
+	if _, err := h.syncer.Run(t.Context()); err != nil {
+		t.Fatalf("the first run, where every drifting item sits between two that download: %v", err)
+	}
+
+	h.source.items["album-1"] = append(h.source.items["album-1"], gphotos.MediaItem{
+		MediaKey: "key-new", CapturedAt: time.Date(2026, 6, 16, 10, 0, 0, 0, time.UTC), Width: 100, Height: 100,
+	})
+	h.source.bodies["key-new"] = []byte("new bytes")
+
+	report, err := h.syncer.Run(t.Context())
+	if err != nil {
+		t.Fatalf("a backlog of %d items repeating their drift stopped the run: %v", len(unminted), err)
+	}
+	if report.Outcome != store.OutcomePartial || report.Failed != len(unminted) {
+		t.Errorf("the run ended as %q with %d failed, want partial with %d", report.Outcome, report.Failed, len(unminted))
+	}
+	if item, err := h.store.Item("key-new"); err != nil || item.State != store.StateDone {
+		t.Errorf("the photo the listing found behind the backlog was not backed up: %+v, %v", item, err)
+	}
+}
+
+// The other side of the same rule: drift on items that have never failed is what a change on
+// Google's side looks like, and it must still stop the run before every item is charged for it.
+func TestDriftOnItemsWithNoHistoryStillTripsTheBreaker(t *testing.T) {
+	bodies := map[string]string{}
+	for index := range 20 {
+		bodies[fmt.Sprintf("key-%02d", index)] = "bytes"
+	}
+	h := newHarness(t, store.SyncAll, bodies)
+	for key := range bodies {
+		h.source.failWith[key] = errNoURLMinted
+	}
+
+	report, err := h.syncer.Run(t.Context())
+	if !errors.Is(err, gphotos.ErrProtocolDrift) {
+		t.Fatalf("a run where every item drifts ended with %v, want the drift", err)
+	}
+	if report.Failed >= len(bodies) {
+		t.Errorf("the breaker let all %d items fail before stopping", report.Failed)
+	}
+}
+
 func TestUnfollowedAlbumsAreListedButNotDownloaded(t *testing.T) {
 	h := newHarness(t, store.SyncNone, map[string]string{"key-a": "bytes"})
 
@@ -660,6 +731,28 @@ func TestRetryClassification(t *testing.T) {
 	for name, test := range cases {
 		if got := Retryable(test.err); got != test.want {
 			t.Errorf("%s: Retryable = %v, want %v", name, got, test.want)
+		}
+	}
+}
+
+func TestOnlyARepeatOfTheRecordedDriftIsKeptFromTheBreaker(t *testing.T) {
+	knownBad := store.MediaItem{MediaKey: "key-a", FailCount: 1, LastError: errNoURLMinted.Error()}
+	otherDrift := fmt.Errorf("%w: wanted a signed download URL at pLFTfd[0], found nothing", gphotos.ErrProtocolDrift)
+	unavailable := &gphotos.HTTPError{StatusCode: 503}
+
+	cases := map[string]struct {
+		item store.MediaItem
+		err  error
+		want bool
+	}{
+		"the same drift as last time":           {knownBad, errNoURLMinted, true},
+		"a different drift on a known-bad item": {knownBad, otherDrift, false},
+		"an outage on a known-bad item":         {store.MediaItem{LastError: unavailable.Error()}, unavailable, false},
+		"drift on an item that never failed":    {store.MediaItem{MediaKey: "key-b"}, errNoURLMinted, false},
+	}
+	for name, tc := range cases {
+		if got := repeatsItsRecordedDrift(tc.item, tc.err); got != tc.want {
+			t.Errorf("%s: repeatsItsRecordedDrift = %v, want %v", name, got, tc.want)
 		}
 	}
 }
