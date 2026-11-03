@@ -87,6 +87,9 @@ func (s *Syncer) download(ctx context.Context, backlog []store.MediaItem,
 					breaker.Succeed()
 					continue
 				}
+				if repeatsItsRecordedDrift(item, err) {
+					continue
+				}
 				if breaker.Fail(err) {
 					log.Printf("syncer: circuit breaker tripped after %d consecutive failures: %v",
 						s.options.BreakerThreshold, err)

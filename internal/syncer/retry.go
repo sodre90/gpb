@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gpb/internal/gphotos"
+	"gpb/internal/store"
 )
 
 // Backoff spaces out retries. The defaults are deliberately timid: a personal backup gains
@@ -66,6 +67,15 @@ func retryAfterOf(err error) time.Duration {
 		return httpErr.RetryAfter
 	}
 	return 0
+}
+
+// repeatsItsRecordedDrift is a failure that is evidence about one item and none about the far
+// end: the protocol drift this item already failed with last time, word for word. The breaker
+// neither counts it nor resets on it. Anything else still counts, a 503 on a known-bad item
+// included, and so does drift on an item with no history, which is what a change on Google's
+// side looks like.
+func repeatsItsRecordedDrift(item store.MediaItem, err error) bool {
+	return errors.Is(err, gphotos.ErrProtocolDrift) && err.Error() == item.LastError
 }
 
 // Breaker aborts a run after enough consecutive failures. Its job is to distinguish "this

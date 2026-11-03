@@ -794,8 +794,19 @@ warmup and list was decided against; §5 says why.)
 - **Concurrency and politeness:** listing is sequential (one page in flight). Downloads
   run on a small worker pool (default 3) behind one global token-bucket limiter (default
   2 req/s) shared with listing. Failures back off exponentially with jitter (1s → 2min),
-  honour `Retry-After`, and a circuit breaker aborts the run after N consecutive transport
-  failures (default 8) rather than grinding against a broken or throttling server.
+  honour `Retry-After`, and a circuit breaker aborts the run after N consecutive failures
+  (default 8) rather than grinding against a broken or throttling server. A failure that
+  repeats, word for word, the protocol drift an item already failed with is kept out of that
+  count: it is evidence about the item, not about the server. Measured 2026-10-25 to 10-28: a
+  dozen videos Google would not mint a URL for came back first every night as the backlog,
+  eight of them in a row tripped the breaker, and the cancelled run listed and backed up
+  nothing for four nights. Drift on an item with no history still counts, because that is
+  what a change on Google's side looks like — and left uncounted it would charge every item in
+  the library a failure a night, writing the whole library off within five. The rule has a
+  price when Google does change something for good: from the second night every item already
+  charged is asked again before eight fresh ones trip the breaker, so a lasting change writes
+  off about eight items a night where the old count wrote off about two. That is bounded, and
+  every one of those nights ends as `drift`, which the Home Assistant alert announces.
   Defaults are deliberately timid; a personal backup does not need to be fast.
 - **Thumbnail traffic is budgeted separately.** Interactive grid browsing fetches
   thumbnails through its own, more generous limiter (§11) rather than the sync bucket —
