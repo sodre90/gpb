@@ -74,15 +74,18 @@ func retryAfterOf(err error) time.Duration {
 // followed album holds it any more, which is decided before any request is made, and an item
 // failing exactly as it failed last time.
 func tellsTheBreakerNothing(item store.MediaItem, err error) bool {
-	return errors.Is(err, errNoFollowedAlbum) || repeatsItsRecordedDrift(item, err)
+	return errors.Is(err, errNoFollowedAlbum) || repeatsItsRecordedFailure(item, err)
 }
 
-// repeatsItsRecordedDrift is a failure that is evidence about one item and none about the far
-// end: the protocol drift this item already failed with last time, word for word. Anything else
-// still counts, a 503 on a known-bad item included, and so does drift on an item with no
-// history, which is what a change on Google's side looks like.
-func repeatsItsRecordedDrift(item store.MediaItem, err error) bool {
-	return errors.Is(err, gphotos.ErrProtocolDrift) && err.Error() == item.LastError
+// repeatsItsRecordedFailure is a failure that is evidence about one item and none about the far
+// end: one no retry can change — Google answering in a shape this client does not accept, or
+// minting the URL on a host it does not recognise — repeating, word for word, what this item
+// already failed with last time. Anything else still counts, a 503 on a known-bad item included,
+// and so does either of those on an item with no history, which is what a change on Google's
+// side looks like.
+func repeatsItsRecordedFailure(item store.MediaItem, err error) bool {
+	sameAnswerEveryTime := errors.Is(err, gphotos.ErrProtocolDrift) || errors.Is(err, gphotos.ErrUnknownContentHost)
+	return sameAnswerEveryTime && err.Error() == item.LastError
 }
 
 // Breaker aborts a run after enough consecutive failures. Its job is to distinguish "this
